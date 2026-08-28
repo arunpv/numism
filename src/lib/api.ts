@@ -79,7 +79,28 @@ export type DuplicateMatch = {
   thumbnail_url: string | null
 }
 
+export type Coin = {
+  id: number
+  country: string
+  denomination: string
+  mint_year: number | null
+  mint_mark: string | null
+  commemorative_theme: string | null
+  quantity: number
+  personal_notes: string | null
+  image_quality_score: number | null
+  album_id: number | null
+  page_number: number | null
+  pocket_number: number | null
+  created_at: string
+  thumbnail_url: string | null
+  mints: { mint_name: string } | null
+  albums: { name: string } | null
+}
+
 export const coinApi = {
+  listCoins: () => callFunction<{ data: Coin[] }>('list-coins', {}),
+
   extractCoin: (front: Blob, back: Blob) => {
     const form = new FormData()
     form.set('front', front, 'front.jpg')

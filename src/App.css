@@ -103,6 +103,50 @@
   }
 }
 
+.coin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.coin-card {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.coin-card-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.coin-card-thumb-empty {
+  border: 1px dashed var(--border);
+}
+
+.coin-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coin-card-title {
+  margin: 0;
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.coin-card-meta {
+  margin: 0;
+}
+
 .camera-capture {
   display: flex;
   flex-direction: column;
