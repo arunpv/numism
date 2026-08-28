@@ -1,19 +1,27 @@
 // See coin_app_requirements.md §5.2, §3.7. Holds GEMINI_API_KEY as a secret
 // env var (set via `supabase secrets set`) — never exposed to the client.
+// Takes both the front (obverse) and back (reverse) photo as multipart form
+// fields, since mint marks/dates/commemorative details can be on either side.
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
-import { callGemini, callGeminiMintMatch } from "../_shared/coin-schema.ts";
+import { callGemini, callGeminiMintMatch, type CoinImage } from "../_shared/coin-schema.ts";
 
 export default {
   fetch: withSupabase({ auth: ["publishable"] }, async (req, ctx) => {
-    const mimeType = req.headers.get("content-type") || "image/jpeg";
-    const imageBytes = await req.arrayBuffer();
+    const form = await req.formData();
+    const frontFile = form.get("front") as File | null;
+    const backFile = form.get("back") as File | null;
+    if (!frontFile || !backFile) {
+      return Response.json({ error: "front and back images are both required" }, { status: 400 });
+    }
+    const front: CoinImage = { bytes: await frontFile.arrayBuffer(), mimeType: frontFile.type || "image/jpeg" };
+    const back: CoinImage = { bytes: await backFile.arrayBuffer(), mimeType: backFile.type || "image/jpeg" };
 
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) return Response.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 });
 
     try {
-      const { image_quality_score, ...fields } = await callGemini(apiKey, imageBytes, mimeType);
+      const { image_quality_score, ...fields } = await callGemini(apiKey, front, back);
 
       // §3.7: if we already have known mint marks on file for this country,
       // re-examine the image constrained to that set instead of trusting
@@ -26,7 +34,7 @@ export default {
 
       const knownMarks = [...new Set((knownMintRows ?? []).map((m) => m.mint_mark))];
       if (knownMarks.length > 0) {
-        fields.mint_mark = await callGeminiMintMatch(apiKey, imageBytes, mimeType, fields.country, knownMarks);
+        fields.mint_mark = await callGeminiMintMatch(apiKey, front, back, fields.country, knownMarks);
       }
 
       let mint_id: number | null = null;

@@ -10,7 +10,7 @@ export default {
 
     const { data: coin, error } = await ctx.supabaseAdmin
       .from("personal_coins")
-      .select("image_path")
+      .select("image_path, image_path_back")
       .eq("id", id)
       .single();
     if (error) return Response.json({ error: error.message }, { status: 404 });
@@ -20,6 +20,11 @@ export default {
       .createSignedUrl(coin.image_path, 3600);
     if (signError) return Response.json({ error: signError.message }, { status: 500 });
 
-    return Response.json({ signedUrl: data.signedUrl });
+    const backSignedUrl = coin.image_path_back
+      ? (await ctx.supabaseAdmin.storage.from("coin-photos").createSignedUrl(coin.image_path_back, 3600)).data
+          ?.signedUrl ?? null
+      : null;
+
+    return Response.json({ signedUrl: data.signedUrl, backSignedUrl });
   }),
 };

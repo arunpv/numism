@@ -80,8 +80,12 @@ export type DuplicateMatch = {
 }
 
 export const coinApi = {
-  extractCoin: (image: Blob) =>
-    postRaw<ExtractResult>('extract-coin', image, { 'Content-Type': image.type || 'image/jpeg' }),
+  extractCoin: (front: Blob, back: Blob) => {
+    const form = new FormData()
+    form.set('front', front, 'front.jpg')
+    form.set('back', back, 'back.jpg')
+    return postRaw<ExtractResult>('extract-coin', form)
+  },
 
   checkDuplicate: (fields: CoinFields) => callFunction<{ matches: DuplicateMatch[] }>('check-duplicate', fields),
 
@@ -91,7 +95,13 @@ export const coinApi = {
       mint_mark,
     }),
 
-  saveCoin: (fields: CoinFields, personal_notes: string, image_quality_score: number | null, image: Blob) => {
+  saveCoin: (
+    fields: CoinFields,
+    personal_notes: string,
+    image_quality_score: number | null,
+    front: Blob,
+    back: Blob,
+  ) => {
     const form = new FormData()
     form.set('country', fields.country)
     form.set('denomination', fields.denomination)
@@ -100,7 +110,8 @@ export const coinApi = {
     if (fields.commemorative_theme) form.set('commemorative_theme', fields.commemorative_theme)
     if (personal_notes) form.set('personal_notes', personal_notes)
     if (image_quality_score != null) form.set('image_quality_score', String(image_quality_score))
-    form.set('image', image, 'coin.jpg')
+    form.set('image', front, 'front.jpg')
+    form.set('image_back', back, 'back.jpg')
     return postRaw<{ id: number }>('save-coin', form)
   },
 
@@ -108,15 +119,17 @@ export const coinApi = {
     matchedId: number,
     replaceImage: boolean,
     personal_notes: string,
-    image: Blob | null,
+    front: Blob | null,
+    back: Blob | null,
     new_quality_score: number | null,
   ) => {
     const form = new FormData()
     form.set('matchedId', String(matchedId))
     form.set('replaceImage', String(replaceImage))
     if (personal_notes) form.set('personal_notes', personal_notes)
-    if (replaceImage && image) {
-      form.set('image', image, 'coin.jpg')
+    if (replaceImage && front && back) {
+      form.set('image', front, 'front.jpg')
+      form.set('image_back', back, 'back.jpg')
       if (new_quality_score != null) form.set('new_quality_score', String(new_quality_score))
     }
     return postRaw<{ id: number; quantity: number }>('save-duplicate', form)

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { coinApi, referenceApi, type CoinFields, type DuplicateMatch } from '../lib/api'
 import { compressImage } from '../lib/image'
+import { CameraCapture } from '../components/CameraCapture'
 
-type Stage = 'idle' | 'extracting' | 'review' | 'saving' | 'saved'
+type Stage = 'capture-front' | 'capture-back' | 'extracting' | 'review' | 'saving' | 'saved'
 
 const EMPTY_FIELDS: CoinFields = {
   country: '',
@@ -13,10 +14,12 @@ const EMPTY_FIELDS: CoinFields = {
 }
 
 export function CapturePage() {
-  const [stage, setStage] = useState<Stage>('idle')
+  const [stage, setStage] = useState<Stage>('capture-front')
   const [error, setError] = useState<string | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [imageBlob, setImageBlob] = useState<Blob | null>(null)
+  const [frontBlob, setFrontBlob] = useState<Blob | null>(null)
+  const [backBlob, setBackBlob] = useState<Blob | null>(null)
+  const [frontUrl, setFrontUrl] = useState<string | null>(null)
+  const [backUrl, setBackUrl] = useState<string | null>(null)
   const [fields, setFields] = useState<CoinFields>(EMPTY_FIELDS)
   const [qualityScore, setQualityScore] = useState<number | null>(null)
   const [mintName, setMintName] = useState<string | null>(null)
@@ -28,30 +31,36 @@ export function CapturePage() {
   const [addingMint, setAddingMint] = useState(false)
   const [newMintName, setNewMintName] = useState('')
   const [savingMint, setSavingMint] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      if (frontUrl) URL.revokeObjectURL(frontUrl)
+      if (backUrl) URL.revokeObjectURL(backUrl)
     }
-  }, [previewUrl])
+  }, [frontUrl, backUrl])
 
-  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-
+  async function handleFrontCaptured(raw: Blob) {
     setError(null)
-    setMatches([])
-    setSavedId(null)
-    setNotes('')
     try {
-      const compressed = await compressImage(file)
-      setImageBlob(compressed)
-      setPreviewUrl(URL.createObjectURL(compressed))
+      const compressed = await compressImage(raw)
+      setFrontBlob(compressed)
+      setFrontUrl(URL.createObjectURL(compressed))
+      setStage('capture-back')
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
+  async function handleBackCaptured(raw: Blob) {
+    if (!frontBlob) return
+    setError(null)
+    try {
+      const compressed = await compressImage(raw)
+      setBackBlob(compressed)
+      setBackUrl(URL.createObjectURL(compressed))
       setStage('extracting')
 
-      const result = await coinApi.extractCoin(compressed)
+      const result = await coinApi.extractCoin(frontBlob, compressed)
       setFields(result.fields)
       setQualityScore(result.image_quality_score)
       setMintName(result.mint_name)
@@ -60,7 +69,7 @@ export function CapturePage() {
       await runDuplicateCheck(result.fields)
     } catch (err) {
       setError((err as Error).message)
-      setStage('idle')
+      setStage('capture-back')
     }
   }
 
@@ -107,10 +116,13 @@ export function CapturePage() {
   }
 
   function reset() {
-    setStage('idle')
-    setImageBlob(null)
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
-    setPreviewUrl(null)
+    setStage('capture-front')
+    setFrontBlob(null)
+    setBackBlob(null)
+    if (frontUrl) URL.revokeObjectURL(frontUrl)
+    if (backUrl) URL.revokeObjectURL(backUrl)
+    setFrontUrl(null)
+    setBackUrl(null)
     setFields(EMPTY_FIELDS)
     setQualityScore(null)
     setMintName(null)
@@ -124,11 +136,11 @@ export function CapturePage() {
   }
 
   async function handleSaveNew() {
-    if (!imageBlob) return
+    if (!frontBlob || !backBlob) return
     setStage('saving')
     setError(null)
     try {
-      const { id } = await coinApi.saveCoin(fields, notes, qualityScore, imageBlob)
+      const { id } = await coinApi.saveCoin(fields, notes, qualityScore, frontBlob, backBlob)
       setSavedId(id)
       setStage('saved')
     } catch (err) {
@@ -141,7 +153,14 @@ export function CapturePage() {
     setStage('saving')
     setError(null)
     try {
-      const { id } = await coinApi.saveDuplicate(matchId, replaceImage, notes, replaceImage ? imageBlob : null, replaceImage ? qualityScore : null)
+      const { id } = await coinApi.saveDuplicate(
+        matchId,
+        replaceImage,
+        notes,
+        replaceImage ? frontBlob : null,
+        replaceImage ? backBlob : null,
+        replaceImage ? qualityScore : null,
+      )
       setSavedId(id)
       setStage('saved')
     } catch (err) {
@@ -156,33 +175,36 @@ export function CapturePage() {
 
       {error && <p className="error">{error}</p>}
 
-      {stage === 'idle' && (
+      {stage === 'capture-front' && <CameraCapture label="Front (obverse) of the coin" onCapture={handleFrontCaptured} />}
+
+      {stage === 'capture-back' && (
         <>
-          <p className="page-hint">Take a photo of a coin to identify and log it.</p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleFileSelected}
-            style={{ display: 'none' }}
-          />
-          <button type="button" onClick={() => fileInputRef.current?.click()}>
-            Take / choose photo
-          </button>
+          {frontUrl && (
+            <div className="side-preview">
+              <img src={frontUrl} alt="Front captured" />
+              <span className="page-hint">Front captured</span>
+            </div>
+          )}
+          <CameraCapture label="Back (reverse) of the coin" onCapture={handleBackCaptured} />
         </>
       )}
 
       {stage === 'extracting' && (
         <>
-          {previewUrl && <img src={previewUrl} alt="Captured coin" className="capture-preview" />}
+          <div className="side-preview">
+            {frontUrl && <img src={frontUrl} alt="Front" />}
+            {backUrl && <img src={backUrl} alt="Back" />}
+          </div>
           <p className="page-hint">Identifying coin…</p>
         </>
       )}
 
       {(stage === 'review' || stage === 'saving') && (
         <div className="capture-review">
-          {previewUrl && <img src={previewUrl} alt="Captured coin" className="capture-preview" />}
+          <div className="side-preview">
+            {frontUrl && <img src={frontUrl} alt="Front" />}
+            {backUrl && <img src={backUrl} alt="Back" />}
+          </div>
 
           <label>
             Country
@@ -213,6 +235,7 @@ export function CapturePage() {
               onBlur={handleFieldBlur}
             />
           </label>
+
           <label>
             Commemorative theme
             <input
@@ -281,10 +304,10 @@ export function CapturePage() {
                     {m.personal_notes && <p className="page-hint">{m.personal_notes}</p>}
                     <div className="duplicate-actions">
                       <button type="button" onClick={() => handleConfirmDuplicate(m.id, false)} disabled={stage === 'saving'}>
-                        Duplicate — keep existing photo
+                        Duplicate — keep existing photos
                       </button>
                       <button type="button" onClick={() => handleConfirmDuplicate(m.id, true)} disabled={stage === 'saving'}>
-                        Duplicate — replace photo
+                        Duplicate — replace photos
                       </button>
                     </div>
                   </div>

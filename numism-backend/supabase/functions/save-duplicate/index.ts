@@ -12,14 +12,17 @@ export default {
     const replaceImage = form.get("replaceImage") === "true";
     const personal_notes = (form.get("personal_notes") as string) || null;
     const image = form.get("image") as File | null;
+    const imageBack = form.get("image_back") as File | null;
     const new_quality_score = form.get("new_quality_score") ? Number(form.get("new_quality_score")) : null;
 
     if (!matchedId) return Response.json({ error: "matchedId is required" }, { status: 400 });
-    if (replaceImage && !image) return Response.json({ error: "image is required when replaceImage=true" }, { status: 400 });
+    if (replaceImage && (!image || !imageBack)) {
+      return Response.json({ error: "image and image_back are required when replaceImage=true" }, { status: 400 });
+    }
 
     const { data: existing, error: fetchError } = await ctx.supabaseAdmin
       .from("personal_coins")
-      .select("id, image_path, quantity, personal_notes")
+      .select("id, image_path, image_path_back, quantity, personal_notes")
       .eq("id", matchedId)
       .single();
     if (fetchError) return Response.json({ error: fetchError.message }, { status: 500 });
@@ -31,15 +34,23 @@ export default {
         : existing.personal_notes,
     };
 
-    if (replaceImage && image) {
+    if (replaceImage && image && imageBack) {
       const newImagePath = `coin_${Date.now()}_${crypto.randomUUID()}.jpg`;
+      const newImagePathBack = `coin_${Date.now()}_${crypto.randomUUID()}_back.jpg`;
       const { error: uploadError } = await ctx.supabaseAdmin.storage
         .from("coin-photos")
         .upload(newImagePath, image, { contentType: image.type || "image/jpeg" });
       if (uploadError) return Response.json({ error: uploadError.message }, { status: 500 });
 
-      await ctx.supabaseAdmin.storage.from("coin-photos").remove([existing.image_path]);
+      const { error: uploadBackError } = await ctx.supabaseAdmin.storage
+        .from("coin-photos")
+        .upload(newImagePathBack, imageBack, { contentType: imageBack.type || "image/jpeg" });
+      if (uploadBackError) return Response.json({ error: uploadBackError.message }, { status: 500 });
+
+      const oldPaths = [existing.image_path, existing.image_path_back].filter(Boolean) as string[];
+      await ctx.supabaseAdmin.storage.from("coin-photos").remove(oldPaths);
       updates.image_path = newImagePath;
+      updates.image_path_back = newImagePathBack;
       updates.image_quality_score = new_quality_score;
     }
 

@@ -14,9 +14,12 @@ export default {
     const commemorative_theme = (form.get("commemorative_theme") as string) || null;
     const personal_notes = (form.get("personal_notes") as string) || null;
     const image_quality_score = form.get("image_quality_score") ? Number(form.get("image_quality_score")) : null;
-    const image = form.get("image") as File;
+    const frontImage = form.get("image") as File;
+    const backImage = form.get("image_back") as File;
 
-    if (!image) return Response.json({ error: "image is required" }, { status: 400 });
+    if (!frontImage || !backImage) {
+      return Response.json({ error: "image and image_back are both required" }, { status: 400 });
+    }
 
     let mint_id: number | null;
     try {
@@ -26,10 +29,16 @@ export default {
     }
 
     const imagePath = `coin_${Date.now()}_${crypto.randomUUID()}.jpg`;
+    const imagePathBack = `coin_${Date.now()}_${crypto.randomUUID()}_back.jpg`;
     const { error: uploadError } = await ctx.supabaseAdmin.storage
       .from("coin-photos")
-      .upload(imagePath, image, { contentType: image.type || "image/jpeg" });
+      .upload(imagePath, frontImage, { contentType: frontImage.type || "image/jpeg" });
     if (uploadError) return Response.json({ error: uploadError.message }, { status: 500 });
+
+    const { error: uploadBackError } = await ctx.supabaseAdmin.storage
+      .from("coin-photos")
+      .upload(imagePathBack, backImage, { contentType: backImage.type || "image/jpeg" });
+    if (uploadBackError) return Response.json({ error: uploadBackError.message }, { status: 500 });
 
     const { data, error: insertError } = await ctx.supabaseAdmin
       .from("personal_coins")
@@ -43,6 +52,7 @@ export default {
           commemorative_theme,
           personal_notes,
           image_path: imagePath,
+          image_path_back: imagePathBack,
           image_quality_score,
         },
       ])
