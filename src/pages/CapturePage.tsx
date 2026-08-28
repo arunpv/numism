@@ -4,7 +4,13 @@ import { compressImage } from '../lib/image'
 
 type Stage = 'idle' | 'extracting' | 'review' | 'saving' | 'saved'
 
-const EMPTY_FIELDS: CoinFields = { country: '', denomination: '', mint_year: null, mint_mark: '' }
+const EMPTY_FIELDS: CoinFields = {
+  country: '',
+  denomination: '',
+  mint_year: null,
+  mint_mark: '',
+  commemorative_theme: null,
+}
 
 export function CapturePage() {
   const [stage, setStage] = useState<Stage>('idle')
@@ -207,6 +213,16 @@ export function CapturePage() {
               onBlur={handleFieldBlur}
             />
           </label>
+          <label>
+            Commemorative theme
+            <input
+              placeholder="Leave blank for a standard coin"
+              value={fields.commemorative_theme ?? ''}
+              onChange={(e) => setFields({ ...fields, commemorative_theme: e.target.value || null })}
+              onBlur={handleFieldBlur}
+            />
+          </label>
+
           {mintName && (
             <p className="page-hint">
               Mint: {mintName}

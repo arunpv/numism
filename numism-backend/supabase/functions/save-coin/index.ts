@@ -11,6 +11,7 @@ export default {
     const denomination = form.get("denomination") as string;
     const mint_year = form.get("mint_year") ? Number(form.get("mint_year")) : null;
     const mint_mark = (form.get("mint_mark") as string) || null;
+    const commemorative_theme = (form.get("commemorative_theme") as string) || null;
     const personal_notes = (form.get("personal_notes") as string) || null;
     const image_quality_score = form.get("image_quality_score") ? Number(form.get("image_quality_score")) : null;
     const image = form.get("image") as File;
@@ -32,7 +33,19 @@ export default {
 
     const { data, error: insertError } = await ctx.supabaseAdmin
       .from("personal_coins")
-      .insert([{ country, denomination, mint_year, mint_mark, mint_id, personal_notes, image_path: imagePath, image_quality_score }])
+      .insert([
+        {
+          country,
+          denomination,
+          mint_year,
+          mint_mark,
+          mint_id,
+          commemorative_theme,
+          personal_notes,
+          image_path: imagePath,
+          image_quality_score,
+        },
+      ])
       .select("id")
       .single();
     if (insertError) return Response.json({ error: insertError.message }, { status: 500 });

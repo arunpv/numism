@@ -6,9 +6,17 @@ export const COIN_SCHEMA = {
     denomination: { type: "string" },
     mint_year: { type: "integer", nullable: true },
     mint_mark: { type: "string", nullable: true },
+    commemorative_theme: {
+      type: "string",
+      nullable: true,
+      description:
+        "If this is a commemorative/special-issue coin (distinct design/theme from the standard circulation " +
+        "coin of this denomination), a short name for the theme/inscription (e.g. 'Kew Gardens', '75th " +
+        "Anniversary of D-Day'). Null for an ordinary circulation coin.",
+    },
     image_quality_score: { type: "integer", description: "Clarity/quality estimate 0-100" },
   },
-  required: ["country", "denomination", "mint_year", "mint_mark", "image_quality_score"],
+  required: ["country", "denomination", "mint_year", "mint_mark", "commemorative_theme", "image_quality_score"],
 };
 
 async function callGeminiRaw(
@@ -60,8 +68,8 @@ export async function callGemini(apiKey: string, imageBytes: ArrayBuffer, mimeTy
     imageBytes,
     mimeType,
     "Identify this coin. Return its country of origin, denomination, mint year, " +
-      "mint mark (if visible), and a 0-100 estimate of how clear/legible the coin " +
-      "details are in this photo.",
+      "mint mark (if visible), whether it's a commemorative/special-issue design and if so its theme, " +
+      "and a 0-100 estimate of how clear/legible the coin details are in this photo.",
     COIN_SCHEMA,
   );
 }

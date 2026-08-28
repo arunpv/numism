@@ -56,6 +56,7 @@ export type CoinFields = {
   denomination: string
   mint_year: number | null
   mint_mark: string | null
+  commemorative_theme: string | null
 }
 
 export type ExtractResult = {
@@ -96,6 +97,7 @@ export const coinApi = {
     form.set('denomination', fields.denomination)
     if (fields.mint_year != null) form.set('mint_year', String(fields.mint_year))
     if (fields.mint_mark) form.set('mint_mark', fields.mint_mark)
+    if (fields.commemorative_theme) form.set('commemorative_theme', fields.commemorative_theme)
     if (personal_notes) form.set('personal_notes', personal_notes)
     if (image_quality_score != null) form.set('image_quality_score', String(image_quality_score))
     form.set('image', image, 'coin.jpg')
