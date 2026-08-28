@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { coinApi, type CoinFields, type DuplicateMatch } from '../lib/api'
+import { coinApi, referenceApi, type CoinFields, type DuplicateMatch } from '../lib/api'
 import { compressImage } from '../lib/image'
 
 type Stage = 'idle' | 'extracting' | 'review' | 'saving' | 'saved'
@@ -14,10 +14,14 @@ export function CapturePage() {
   const [fields, setFields] = useState<CoinFields>(EMPTY_FIELDS)
   const [qualityScore, setQualityScore] = useState<number | null>(null)
   const [mintName, setMintName] = useState<string | null>(null)
+  const [markImageUrl, setMarkImageUrl] = useState<string | null>(null)
   const [notes, setNotes] = useState('')
   const [matches, setMatches] = useState<DuplicateMatch[]>([])
   const [checkingDup, setCheckingDup] = useState(false)
   const [savedId, setSavedId] = useState<number | null>(null)
+  const [addingMint, setAddingMint] = useState(false)
+  const [newMintName, setNewMintName] = useState('')
+  const [savingMint, setSavingMint] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -45,6 +49,7 @@ export function CapturePage() {
       setFields(result.fields)
       setQualityScore(result.image_quality_score)
       setMintName(result.mint_name)
+      setMarkImageUrl(result.mark_image_url)
       setStage('review')
       await runDuplicateCheck(result.fields)
     } catch (err) {
@@ -69,10 +74,29 @@ export function CapturePage() {
   async function handleFieldBlur() {
     await runDuplicateCheck(fields)
     try {
-      const { mint_name } = await coinApi.resolveMint(fields.country, fields.mint_mark)
+      const { mint_name, mark_image_url } = await coinApi.resolveMint(fields.country, fields.mint_mark)
       setMintName(mint_name)
+      setMarkImageUrl(mark_image_url)
     } catch {
       // best-effort preview lookup; save still resolves server-side
+    }
+  }
+
+  async function handleAddMint() {
+    if (!fields.country || !fields.mint_mark || !newMintName.trim()) return
+    setSavingMint(true)
+    setError(null)
+    try {
+      await referenceApi.createMint(fields.country, fields.mint_mark, newMintName.trim())
+      const { mint_name, mark_image_url } = await coinApi.resolveMint(fields.country, fields.mint_mark)
+      setMintName(mint_name)
+      setMarkImageUrl(mark_image_url)
+      setAddingMint(false)
+      setNewMintName('')
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSavingMint(false)
     }
   }
 
@@ -84,10 +108,13 @@ export function CapturePage() {
     setFields(EMPTY_FIELDS)
     setQualityScore(null)
     setMintName(null)
+    setMarkImageUrl(null)
     setNotes('')
     setMatches([])
     setError(null)
     setSavedId(null)
+    setAddingMint(false)
+    setNewMintName('')
   }
 
   async function handleSaveNew() {
@@ -180,7 +207,39 @@ export function CapturePage() {
               onBlur={handleFieldBlur}
             />
           </label>
-          {mintName && <p className="page-hint">Mint: {mintName}</p>}
+          {mintName && (
+            <p className="page-hint">
+              Mint: {mintName}
+              {markImageUrl && <img src={markImageUrl} alt="Reference mint mark" className="mark-image-preview" />}
+            </p>
+          )}
+
+          {!mintName && fields.country && fields.mint_mark && !addingMint && (
+            <div className="page-hint">
+              No mint on file for {fields.country} / {fields.mint_mark}.{' '}
+              <button type="button" className="mint-image-btn" onClick={() => setAddingMint(true)}>
+                Add it now
+              </button>
+            </div>
+          )}
+
+          {addingMint && (
+            <div className="add-mint-inline">
+              <p className="page-hint">
+                New mint: {fields.country} / {fields.mint_mark}
+              </p>
+              <input
+                placeholder="Mint name (e.g. Denver)"
+                value={newMintName}
+                onChange={(e) => setNewMintName(e.target.value)}
+              />
+              <button type="button" onClick={handleAddMint} disabled={savingMint || !newMintName.trim()}>
+                {savingMint ? 'Saving…' : 'Save mint'}
+              </button>
+              <p className="page-hint">You can attach a reference photo for this mark later from the Mints tab.</p>
+            </div>
+          )}
+
           {qualityScore != null && <p className="page-hint">Image quality score: {qualityScore}</p>}
           <label>
             Notes

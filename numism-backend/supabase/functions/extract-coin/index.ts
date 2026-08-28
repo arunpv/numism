@@ -31,19 +31,25 @@ export default {
 
       let mint_id: number | null = null;
       let mint_name: string | null = null;
+      let mark_image_url: string | null = null;
       if (fields.mint_mark) {
         const { data: mint, error: mintError } = await ctx.supabaseAdmin
           .from("mints")
-          .select("id, mint_name")
+          .select("id, mint_name, mark_image_path")
           .ilike("country", fields.country.trim())
           .ilike("mint_mark", fields.mint_mark.trim())
           .maybeSingle();
         if (mintError) return Response.json({ error: mintError.message }, { status: 500 });
         mint_id = mint?.id ?? null;
         mint_name = mint?.mint_name ?? null;
+        if (mint?.mark_image_path) {
+          mark_image_url =
+            (await ctx.supabaseAdmin.storage.from("mint-marks").createSignedUrl(mint.mark_image_path, 3600)).data
+              ?.signedUrl ?? null;
+        }
       }
 
-      return Response.json({ fields, image_quality_score, mint_id, mint_name });
+      return Response.json({ fields, image_quality_score, mint_id, mint_name, mark_image_url });
     } catch (err) {
       return Response.json({ error: (err as Error).message }, { status: 502 });
     }

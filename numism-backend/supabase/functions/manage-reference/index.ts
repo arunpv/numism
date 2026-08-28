@@ -22,6 +22,19 @@ export default {
       const orderCol = table === "mints" ? "country" : "name";
       const { data, error } = await ctx.supabaseAdmin.from(table).select("*").order(orderCol);
       if (error) return Response.json({ error: error.message }, { status: 500 });
+
+      if (table === "mints") {
+        const withImages = await Promise.all(
+          (data ?? []).map(async (m) => ({
+            ...m,
+            mark_image_url: m.mark_image_path
+              ? (await ctx.supabaseAdmin.storage.from("mint-marks").createSignedUrl(m.mark_image_path, 3600)).data
+                  ?.signedUrl ?? null
+              : null,
+          })),
+        );
+        return Response.json({ data: withImages });
+      }
       return Response.json({ data });
     }
 
@@ -50,6 +63,14 @@ export default {
     if (action === "delete") {
       const { id } = body;
       if (id == null) return Response.json({ error: "id is required" }, { status: 400 });
+
+      if (table === "mints") {
+        const { data: mint } = await ctx.supabaseAdmin.from("mints").select("mark_image_path").eq("id", id).single();
+        if (mint?.mark_image_path) {
+          await ctx.supabaseAdmin.storage.from("mint-marks").remove([mint.mark_image_path]);
+        }
+      }
+
       const { error } = await ctx.supabaseAdmin.from(table).delete().eq("id", id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true });

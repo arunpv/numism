@@ -22,7 +22,15 @@ async function postRaw<T>(name: string, body: BodyInit, extraHeaders: Record<str
   return json
 }
 
-export type Mint = { id: number; country: string; mint_mark: string; mint_name: string; created_at: string }
+export type Mint = {
+  id: number
+  country: string
+  mint_mark: string
+  mint_name: string
+  created_at: string
+  mark_image_path: string | null
+  mark_image_url: string | null
+}
 export type Album = { id: number; name: string; created_at: string }
 
 export const referenceApi = {
@@ -30,6 +38,13 @@ export const referenceApi = {
   createMint: (country: string, mint_mark: string, mint_name: string) =>
     callFunction<{ data: Mint }>('manage-reference', { table: 'mints', action: 'create', country, mint_mark, mint_name }),
   deleteMint: (id: number) => callFunction<{ ok: true }>('manage-reference', { table: 'mints', action: 'delete', id }),
+
+  uploadMintImage: (mintId: number, image: Blob | null) => {
+    const form = new FormData()
+    form.set('mintId', String(mintId))
+    if (image) form.set('image', image, 'mark.jpg')
+    return postRaw<{ mark_image_url: string | null }>('upload-mint-image', form)
+  },
 
   listAlbums: () => callFunction<{ data: Album[] }>('manage-reference', { table: 'albums', action: 'list' }),
   createAlbum: (name: string) => callFunction<{ data: Album }>('manage-reference', { table: 'albums', action: 'create', name }),
@@ -48,6 +63,7 @@ export type ExtractResult = {
   image_quality_score: number | null
   mint_id: number | null
   mint_name: string | null
+  mark_image_url: string | null
 }
 
 export type DuplicateMatch = {
@@ -69,7 +85,10 @@ export const coinApi = {
   checkDuplicate: (fields: CoinFields) => callFunction<{ matches: DuplicateMatch[] }>('check-duplicate', fields),
 
   resolveMint: (country: string, mint_mark: string | null) =>
-    callFunction<{ mint_id: number | null; mint_name: string | null }>('resolve-mint', { country, mint_mark }),
+    callFunction<{ mint_id: number | null; mint_name: string | null; mark_image_url: string | null }>('resolve-mint', {
+      country,
+      mint_mark,
+    }),
 
   saveCoin: (fields: CoinFields, personal_notes: string, image_quality_score: number | null, image: Blob) => {
     const form = new FormData()
