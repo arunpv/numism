@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { coinApi, type Coin } from '../lib/api'
+import { CoinDetailPage } from './CoinDetailPage'
 
 export function CoinsPage() {
   const [coins, setCoins] = useState<Coin[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<number | null>(null)
 
   useEffect(() => {
     load()
@@ -23,6 +25,18 @@ export function CoinsPage() {
     }
   }
 
+  if (selectedId != null) {
+    return (
+      <CoinDetailPage
+        coinId={selectedId}
+        onBack={() => {
+          setSelectedId(null)
+          load()
+        }}
+      />
+    )
+  }
+
   return (
     <div className="page">
       <h1>Coins</h1>
@@ -36,7 +50,7 @@ export function CoinsPage() {
       ) : (
         <ul className="coin-list">
           {coins.map((c) => (
-            <li key={c.id} className="coin-card">
+            <li key={c.id} className="coin-card coin-card-clickable" onClick={() => setSelectedId(c.id)}>
               {c.thumbnail_url ? (
                 <img src={c.thumbnail_url} alt={`${c.country} ${c.denomination}`} className="coin-card-thumb" />
               ) : (

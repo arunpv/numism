@@ -98,8 +98,22 @@ export type Coin = {
   albums: { name: string } | null
 }
 
+export type CoinDetail = Coin & { image_path: string; image_path_back: string | null; back_thumbnail_url: string | null }
+
+export type CoinEditFields = CoinFields & {
+  personal_notes: string | null
+  album_id: number | null
+  page_number: number | null
+  pocket_number: number | null
+}
+
 export const coinApi = {
   listCoins: () => callFunction<{ data: Coin[] }>('list-coins', {}),
+
+  getCoin: (id: number) => callFunction<{ data: CoinDetail }>('get-coin', { id }),
+
+  updateCoin: (id: number, fields: CoinEditFields) =>
+    callFunction<{ data: CoinDetail }>('update-coin', { id, ...fields }),
 
   extractCoin: (front: Blob, back: Blob) => {
     const form = new FormData()

@@ -119,6 +119,28 @@
   border-bottom: 1px solid var(--border);
 }
 
+.coin-card-clickable {
+  cursor: pointer;
+
+  &:hover {
+    background: var(--accent-bg);
+  }
+}
+
+.back-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font: inherit;
+  padding: 0;
+  margin-bottom: 12px;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
 .coin-card-thumb {
   width: 64px;
   height: 64px;
@@ -230,7 +252,8 @@
   }
 
   input,
-  textarea {
+  textarea,
+  select {
     font: inherit;
     padding: 8px 10px;
     border: 1px solid var(--border);
