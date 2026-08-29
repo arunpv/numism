@@ -52,12 +52,29 @@ export default {
         if (error) return Response.json({ error: error.message }, { status: 500 });
         return Response.json({ data });
       } else {
-        const { name } = body;
+        const { name, num_pages, pockets_per_page } = body;
         if (!name?.trim()) return Response.json({ error: "name is required" }, { status: 400 });
-        const { data, error } = await ctx.supabaseAdmin.from("albums").insert({ name: name.trim() }).select().single();
+        const { data, error } = await ctx.supabaseAdmin
+          .from("albums")
+          .insert({ name: name.trim(), num_pages: num_pages ?? null, pockets_per_page: pockets_per_page ?? null })
+          .select()
+          .single();
         if (error) return Response.json({ error: error.message }, { status: 500 });
         return Response.json({ data });
       }
+    }
+
+    if (action === "update" && table === "albums") {
+      const { id, num_pages, pockets_per_page } = body;
+      if (id == null) return Response.json({ error: "id is required" }, { status: 400 });
+      const { data, error } = await ctx.supabaseAdmin
+        .from("albums")
+        .update({ num_pages: num_pages ?? null, pockets_per_page: pockets_per_page ?? null })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ data });
     }
 
     if (action === "delete") {

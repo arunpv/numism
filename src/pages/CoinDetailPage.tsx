@@ -149,6 +149,17 @@ export function CoinDetailPage({ coinId, onBack }: Props) {
         </label>
         {fields.album_id != null && (
           <>
+            {(() => {
+              const selectedAlbum = albums.find((a) => a.id === fields.album_id)
+              return selectedAlbum?.num_pages != null && selectedAlbum?.pockets_per_page != null ? (
+                <p className="page-hint">
+                  Layout: {selectedAlbum.num_pages} pages × {selectedAlbum.pockets_per_page} pockets — placement
+                  outside this range or already occupied will be rejected.
+                </p>
+              ) : (
+                <p className="page-hint">This album has no layout set — placement isn't validated.</p>
+              )
+            })()}
             <label>
               Page number
               <input

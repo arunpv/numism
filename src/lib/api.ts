@@ -31,7 +31,13 @@ export type Mint = {
   mark_image_path: string | null
   mark_image_url: string | null
 }
-export type Album = { id: number; name: string; created_at: string }
+export type Album = {
+  id: number
+  name: string
+  created_at: string
+  num_pages: number | null
+  pockets_per_page: number | null
+}
 
 export const referenceApi = {
   listMints: () => callFunction<{ data: Mint[] }>('manage-reference', { table: 'mints', action: 'list' }),
@@ -47,7 +53,22 @@ export const referenceApi = {
   },
 
   listAlbums: () => callFunction<{ data: Album[] }>('manage-reference', { table: 'albums', action: 'list' }),
-  createAlbum: (name: string) => callFunction<{ data: Album }>('manage-reference', { table: 'albums', action: 'create', name }),
+  createAlbum: (name: string, num_pages: number | null, pockets_per_page: number | null) =>
+    callFunction<{ data: Album }>('manage-reference', {
+      table: 'albums',
+      action: 'create',
+      name,
+      num_pages,
+      pockets_per_page,
+    }),
+  updateAlbumLayout: (id: number, num_pages: number | null, pockets_per_page: number | null) =>
+    callFunction<{ data: Album }>('manage-reference', {
+      table: 'albums',
+      action: 'update',
+      id,
+      num_pages,
+      pockets_per_page,
+    }),
   deleteAlbum: (id: number) => callFunction<{ ok: true }>('manage-reference', { table: 'albums', action: 'delete', id }),
 }
 

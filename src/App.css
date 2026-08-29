@@ -379,6 +379,51 @@
   }
 }
 
+.album-row {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.album-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+}
+
+.album-edit-inline {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+
+  input {
+    width: 90px;
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text-h);
+  }
+
+  button {
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    color: var(--text);
+    background: none;
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+  }
+}
+
 .mint-row {
   gap: 10px;
 }
