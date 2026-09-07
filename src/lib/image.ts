@@ -1,6 +1,15 @@
 // Client-side downscale/compress before upload — see coin_app_requirements.md §3.1.
+import { removeBackground as removeBackgroundImg } from '@imgly/background-removal'
+
 const MAX_DIMENSION = 1600
 const JPEG_QUALITY = 0.8
+
+// Runs in-browser (WASM), no server round-trip. Coin photos always get a
+// transparent PNG back so they display cleanly regardless of the surrounding
+// page background.
+export async function removeBackground(file: Blob): Promise<Blob> {
+  return removeBackgroundImg(file)
+}
 
 export async function compressImage(file: Blob): Promise<Blob> {
   const bitmap = await createImageBitmap(file)

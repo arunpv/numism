@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { coinApi, referenceApi, type Album, type CoinDetail, type CoinEditFields } from '../lib/api'
+import { CoinExtraFields } from '../components/CoinExtraFields'
+import { RarityBadge } from '../components/RarityBadge'
 
 type Props = {
   coinId: number
@@ -39,6 +41,20 @@ export function CoinDetailPage({ coinId, onBack }: Props) {
         album_id: coinData.album_id,
         page_number: coinData.page_number,
         pocket_number: coinData.pocket_number,
+        period: coinData.period,
+        value: coinData.value,
+        currency: coinData.currency,
+        composition: coinData.composition,
+        weight_grams: coinData.weight_grams,
+        diameter_mm: coinData.diameter_mm,
+        thickness_mm: coinData.thickness_mm,
+        shape: coinData.shape,
+        orientation: coinData.orientation,
+        demonetized: coinData.demonetized,
+        rarity: coinData.rarity,
+        estimated_value_low: coinData.estimated_value_low,
+        estimated_value_high: coinData.estimated_value_high,
+        grade: coinData.grade,
       })
     } catch (e) {
       setError((e as Error).message)
@@ -55,6 +71,31 @@ export function CoinDetailPage({ coinId, onBack }: Props) {
     try {
       const { data } = await coinApi.updateCoin(coinId, fields)
       setCoin(data)
+      setFields({
+        country: data.country,
+        denomination: data.denomination,
+        mint_year: data.mint_year,
+        mint_mark: data.mint_mark,
+        commemorative_theme: data.commemorative_theme,
+        personal_notes: data.personal_notes,
+        album_id: data.album_id,
+        page_number: data.page_number,
+        pocket_number: data.pocket_number,
+        period: data.period,
+        value: data.value,
+        currency: data.currency,
+        composition: data.composition,
+        weight_grams: data.weight_grams,
+        diameter_mm: data.diameter_mm,
+        thickness_mm: data.thickness_mm,
+        shape: data.shape,
+        orientation: data.orientation,
+        demonetized: data.demonetized,
+        rarity: data.rarity,
+        estimated_value_low: data.estimated_value_low,
+        estimated_value_high: data.estimated_value_high,
+        grade: data.grade,
+      })
       setSaved(true)
     } catch (e) {
       setError((e as Error).message)
@@ -79,7 +120,9 @@ export function CoinDetailPage({ coinId, onBack }: Props) {
       <button type="button" className="back-link" onClick={onBack}>
         ← Back to Coins
       </button>
-      <h1>Coin #{coinId}</h1>
+      <h1>
+        Coin #{coinId} {fields.rarity && <RarityBadge rarity={fields.rarity} />}
+      </h1>
 
       {error && <p className="error">{error}</p>}
       {saved && <p className="page-hint">Saved.</p>}
@@ -125,6 +168,9 @@ export function CoinDetailPage({ coinId, onBack }: Props) {
             onChange={(e) => setFields({ ...fields, commemorative_theme: e.target.value || null })}
           />
         </label>
+
+        <CoinExtraFields fields={fields} onChange={setFields} />
+
         <label>
           Notes
           <textarea

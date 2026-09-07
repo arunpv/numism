@@ -9,6 +9,13 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
+      workbox: {
+        // The background-removal library's onnxruntime WASM runtime is
+        // 20MB+ — far past workbox's default 2MB precache limit, and not
+        // worth precaching at install time anyway (it's fetched lazily the
+        // first time a photo is captured).
+        globIgnores: ['**/ort*.{wasm,mjs,js}'],
+      },
       manifest: {
         name: 'Numismatica',
         short_name: 'Numismatica',

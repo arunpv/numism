@@ -17,6 +17,21 @@ export default {
     const frontImage = form.get("image") as File;
     const backImage = form.get("image_back") as File;
 
+    const period = (form.get("period") as string) || null;
+    const value = form.get("value") ? Number(form.get("value")) : null;
+    const currency = (form.get("currency") as string) || null;
+    const composition = (form.get("composition") as string) || null;
+    const weight_grams = form.get("weight_grams") ? Number(form.get("weight_grams")) : null;
+    const diameter_mm = form.get("diameter_mm") ? Number(form.get("diameter_mm")) : null;
+    const thickness_mm = form.get("thickness_mm") ? Number(form.get("thickness_mm")) : null;
+    const shape = (form.get("shape") as string) || null;
+    const orientation = (form.get("orientation") as string) || null;
+    const demonetized = form.get("demonetized") === "true";
+    const rarity = (form.get("rarity") as string) || null;
+    const estimated_value_low = form.get("estimated_value_low") ? Number(form.get("estimated_value_low")) : null;
+    const estimated_value_high = form.get("estimated_value_high") ? Number(form.get("estimated_value_high")) : null;
+    const grade = (form.get("grade") as string) || null;
+
     if (!frontImage || !backImage) {
       return Response.json({ error: "image and image_back are both required" }, { status: 400 });
     }
@@ -28,8 +43,10 @@ export default {
       return Response.json({ error: (err as Error).message }, { status: 500 });
     }
 
-    const imagePath = `coin_${Date.now()}_${crypto.randomUUID()}.jpg`;
-    const imagePathBack = `coin_${Date.now()}_${crypto.randomUUID()}_back.jpg`;
+    const frontExt = (frontImage.type || "image/jpeg").includes("png") ? "png" : "jpg";
+    const backExt = (backImage.type || "image/jpeg").includes("png") ? "png" : "jpg";
+    const imagePath = `coin_${Date.now()}_${crypto.randomUUID()}.${frontExt}`;
+    const imagePathBack = `coin_${Date.now()}_${crypto.randomUUID()}_back.${backExt}`;
     const { error: uploadError } = await ctx.supabaseAdmin.storage
       .from("coin-photos")
       .upload(imagePath, frontImage, { contentType: frontImage.type || "image/jpeg" });
@@ -54,6 +71,20 @@ export default {
           image_path: imagePath,
           image_path_back: imagePathBack,
           image_quality_score,
+          period,
+          value,
+          currency,
+          composition,
+          weight_grams,
+          diameter_mm,
+          thickness_mm,
+          shape,
+          orientation,
+          demonetized,
+          rarity,
+          estimated_value_low,
+          estimated_value_high,
+          grade,
         },
       ])
       .select("id")

@@ -1,4 +1,47 @@
 // Shared Gemini logic for coin extraction (see coin_app_requirements.md §3.2, §3.7, §5.2).
+
+// Fields Gemini can estimate from the two photos beyond bare identification:
+// physical/reference details plus a rarity/valuation/condition assessment.
+// Shared between the capture-time extraction schema and the standalone
+// re-assessment schema used when identity fields change later.
+export const ASSESSMENT_SCHEMA_PROPERTIES = {
+  period: {
+    type: "string",
+    nullable: true,
+    description: "Historical period/era this coin belongs to (e.g. 'Ancient Rome', 'Victorian', 'Modern').",
+  },
+  value: { type: "number", nullable: true, description: "Numeric face value of the coin, e.g. 0.25." },
+  currency: {
+    type: "string",
+    nullable: true,
+    description: "Name of the currency unit, e.g. 'Dollar', 'Rupee', 'Paise', 'Cent', 'Pound', 'Pence'.",
+  },
+  composition: { type: "string", nullable: true, description: "Metal or alloy composition, e.g. 'Copper-Nickel'." },
+  weight_grams: { type: "number", nullable: true, description: "Estimated weight in grams, based on known specs for this coin type." },
+  diameter_mm: { type: "number", nullable: true, description: "Estimated diameter in millimeters." },
+  thickness_mm: { type: "number", nullable: true, description: "Estimated thickness in millimeters." },
+  shape: { type: "string", nullable: true, description: "Coin shape, e.g. 'Round', 'Scalloped', 'Square'." },
+  orientation: {
+    type: "string",
+    nullable: true,
+    description: "Die alignment of the coin, e.g. 'Coin alignment', 'Medal alignment'.",
+  },
+  rarity: { type: "string", nullable: true, description: "Rarity category, e.g. 'Common', 'Scarce', 'Rare'." },
+  estimated_value_low: { type: "number", nullable: true, description: "Low end of estimated market value (USD)." },
+  estimated_value_high: { type: "number", nullable: true, description: "High end of estimated market value (USD)." },
+  grade: {
+    type: "string",
+    nullable: true,
+    description: "Estimated condition grade from the images, e.g. 'MS-63', 'VF-30', 'Good'.",
+  },
+};
+
+export const ASSESSMENT_SCHEMA = {
+  type: "object",
+  properties: ASSESSMENT_SCHEMA_PROPERTIES,
+  required: Object.keys(ASSESSMENT_SCHEMA_PROPERTIES),
+};
+
 export const COIN_SCHEMA = {
   type: "object",
   properties: {
@@ -14,9 +57,20 @@ export const COIN_SCHEMA = {
         "coin of this denomination), a short name for the theme/inscription (e.g. 'Kew Gardens', '75th " +
         "Anniversary of D-Day'). Null for an ordinary circulation coin.",
     },
+    ...ASSESSMENT_SCHEMA_PROPERTIES,
+    demonetized: { type: "boolean", description: "True if this coin/denomination is no longer legal tender." },
     image_quality_score: { type: "integer", description: "Clarity/quality estimate 0-100" },
   },
-  required: ["country", "denomination", "mint_year", "mint_mark", "commemorative_theme", "image_quality_score"],
+  required: [
+    "country",
+    "denomination",
+    "mint_year",
+    "mint_mark",
+    "commemorative_theme",
+    ...Object.keys(ASSESSMENT_SCHEMA_PROPERTIES),
+    "demonetized",
+    "image_quality_score",
+  ],
 };
 
 export type CoinImage = { bytes: ArrayBuffer; mimeType: string };
@@ -85,9 +139,34 @@ export async function callGemini(apiKey: string, front: CoinImage, back: CoinIma
     [front, back],
     "These two images are the front (obverse) and back (reverse) of the same coin. Identify this coin. " +
       "Return its country of origin, denomination, mint year, mint mark (if visible on either side), " +
-      "whether it's a commemorative/special-issue design and if so its theme, and a 0-100 estimate of how " +
-      "clear/legible the coin details are across both photos.",
+      "whether it's a commemorative/special-issue design and if so its theme, a 0-100 estimate of how " +
+      "clear/legible the coin details are across both photos, and your best estimate of its historical " +
+      "period, face value, currency unit, metal composition, weight/diameter/thickness, shape, die " +
+      "orientation, whether it's demonetized, and an assessment of its rarity, condition grade, and " +
+      "estimated market value range — base physical estimates on known specs for this coin type where the " +
+      "photos alone aren't conclusive.",
     COIN_SCHEMA,
+  );
+}
+
+// Re-assessment only (rarity/period/value/grade/etc), used when a coin's
+// identity fields change after the initial capture and the AI estimate needs
+// to be refreshed against the coin's already-stored photos.
+export async function callGeminiAssessment(
+  apiKey: string,
+  front: CoinImage,
+  back: CoinImage,
+  country: string,
+  denomination: string,
+) {
+  return callGeminiRaw(
+    apiKey,
+    [front, back],
+    `These two images are the front and back of a ${denomination} coin from ${country}. Assess its historical ` +
+      "period, face value, currency unit, metal composition, weight/diameter/thickness, shape, die " +
+      "orientation, rarity, condition grade, and estimated market value range — base physical estimates on " +
+      "known specs for this coin type where the photos alone aren't conclusive.",
+    ASSESSMENT_SCHEMA,
   );
 }
 

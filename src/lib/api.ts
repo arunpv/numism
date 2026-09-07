@@ -78,6 +78,20 @@ export type CoinFields = {
   mint_year: number | null
   mint_mark: string | null
   commemorative_theme: string | null
+  period: string | null
+  value: number | null
+  currency: string | null
+  composition: string | null
+  weight_grams: number | null
+  diameter_mm: number | null
+  thickness_mm: number | null
+  shape: string | null
+  orientation: string | null
+  demonetized: boolean
+  rarity: string | null
+  estimated_value_low: number | null
+  estimated_value_high: number | null
+  grade: string | null
 }
 
 export type ExtractResult = {
@@ -100,13 +114,8 @@ export type DuplicateMatch = {
   thumbnail_url: string | null
 }
 
-export type Coin = {
+export type Coin = CoinFields & {
   id: number
-  country: string
-  denomination: string
-  mint_year: number | null
-  mint_mark: string | null
-  commemorative_theme: string | null
   quantity: number
   personal_notes: string | null
   image_quality_score: number | null
@@ -138,8 +147,9 @@ export const coinApi = {
 
   extractCoin: (front: Blob, back: Blob) => {
     const form = new FormData()
-    form.set('front', front, 'front.jpg')
-    form.set('back', back, 'back.jpg')
+    const ext = front.type.includes('png') ? 'png' : 'jpg'
+    form.set('front', front, `front.${ext}`)
+    form.set('back', back, `back.${ext}`)
     return postRaw<ExtractResult>('extract-coin', form)
   },
 
@@ -166,8 +176,23 @@ export const coinApi = {
     if (fields.commemorative_theme) form.set('commemorative_theme', fields.commemorative_theme)
     if (personal_notes) form.set('personal_notes', personal_notes)
     if (image_quality_score != null) form.set('image_quality_score', String(image_quality_score))
-    form.set('image', front, 'front.jpg')
-    form.set('image_back', back, 'back.jpg')
+    if (fields.period) form.set('period', fields.period)
+    if (fields.value != null) form.set('value', String(fields.value))
+    if (fields.currency) form.set('currency', fields.currency)
+    if (fields.composition) form.set('composition', fields.composition)
+    if (fields.weight_grams != null) form.set('weight_grams', String(fields.weight_grams))
+    if (fields.diameter_mm != null) form.set('diameter_mm', String(fields.diameter_mm))
+    if (fields.thickness_mm != null) form.set('thickness_mm', String(fields.thickness_mm))
+    if (fields.shape) form.set('shape', fields.shape)
+    if (fields.orientation) form.set('orientation', fields.orientation)
+    form.set('demonetized', String(fields.demonetized))
+    if (fields.rarity) form.set('rarity', fields.rarity)
+    if (fields.estimated_value_low != null) form.set('estimated_value_low', String(fields.estimated_value_low))
+    if (fields.estimated_value_high != null) form.set('estimated_value_high', String(fields.estimated_value_high))
+    if (fields.grade) form.set('grade', fields.grade)
+    const ext = front.type.includes('png') ? 'png' : 'jpg'
+    form.set('image', front, `front.${ext}`)
+    form.set('image_back', back, `back.${ext}`)
     return postRaw<{ id: number }>('save-coin', form)
   },
 
@@ -184,8 +209,9 @@ export const coinApi = {
     form.set('replaceImage', String(replaceImage))
     if (personal_notes) form.set('personal_notes', personal_notes)
     if (replaceImage && front && back) {
-      form.set('image', front, 'front.jpg')
-      form.set('image_back', back, 'back.jpg')
+      const ext = front.type.includes('png') ? 'png' : 'jpg'
+      form.set('image', front, `front.${ext}`)
+      form.set('image_back', back, `back.${ext}`)
       if (new_quality_score != null) form.set('new_quality_score', String(new_quality_score))
     }
     return postRaw<{ id: number; quantity: number }>('save-duplicate', form)

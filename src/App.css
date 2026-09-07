@@ -44,6 +44,56 @@
   margin-bottom: 20px;
 }
 
+.rarity-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.rarity-badge-common {
+  background: #e5e7eb;
+  color: #374151;
+}
+.rarity-badge-scarce {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.rarity-badge-rare {
+  background: #fef3c7;
+  color: #92400e;
+}
+.rarity-badge-extreme {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.rarity-badge-unknown {
+  background: var(--border);
+  color: var(--text);
+}
+
+@media (prefers-color-scheme: dark) {
+  .rarity-badge-common {
+    background: #374151;
+    color: #e5e7eb;
+  }
+  .rarity-badge-scarce {
+    background: #1e3a5f;
+    color: #93c5fd;
+  }
+  .rarity-badge-rare {
+    background: #573a0a;
+    color: #fcd34d;
+  }
+  .rarity-badge-extreme {
+    background: #5a1a1a;
+    color: #fca5a5;
+  }
+}
+
 .add-form {
   display: flex;
   gap: 8px;
@@ -288,6 +338,33 @@
     border-radius: 6px;
     background: var(--bg);
     color: var(--text-h);
+  }
+
+  .field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 0;
+
+    legend {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-h);
+      padding: 0 4px;
+    }
+  }
+
+  .checkbox-label {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+
+    input {
+      width: auto;
+    }
   }
 }
 

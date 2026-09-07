@@ -35,8 +35,10 @@ export default {
     };
 
     if (replaceImage && image && imageBack) {
-      const newImagePath = `coin_${Date.now()}_${crypto.randomUUID()}.jpg`;
-      const newImagePathBack = `coin_${Date.now()}_${crypto.randomUUID()}_back.jpg`;
+      const frontExt = (image.type || "image/jpeg").includes("png") ? "png" : "jpg";
+      const backExt = (imageBack.type || "image/jpeg").includes("png") ? "png" : "jpg";
+      const newImagePath = `coin_${Date.now()}_${crypto.randomUUID()}.${frontExt}`;
+      const newImagePathBack = `coin_${Date.now()}_${crypto.randomUUID()}_back.${backExt}`;
       const { error: uploadError } = await ctx.supabaseAdmin.storage
         .from("coin-photos")
         .upload(newImagePath, image, { contentType: image.type || "image/jpeg" });

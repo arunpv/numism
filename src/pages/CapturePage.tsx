@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { coinApi, referenceApi, type CoinFields, type DuplicateMatch } from '../lib/api'
-import { compressImage } from '../lib/image'
+import { compressImage, removeBackground } from '../lib/image'
 import { CameraCapture } from '../components/CameraCapture'
+import { CoinExtraFields } from '../components/CoinExtraFields'
+import { RarityBadge } from '../components/RarityBadge'
 
-type Stage = 'capture-front' | 'capture-back' | 'extracting' | 'review' | 'saving' | 'saved'
+type Stage = 'capture-front' | 'removing-bg-front' | 'capture-back' | 'removing-bg-back' | 'extracting' | 'review' | 'saving' | 'saved'
 
 const EMPTY_FIELDS: CoinFields = {
   country: '',
@@ -11,6 +13,20 @@ const EMPTY_FIELDS: CoinFields = {
   mint_year: null,
   mint_mark: '',
   commemorative_theme: null,
+  period: null,
+  value: null,
+  currency: null,
+  composition: null,
+  weight_grams: null,
+  diameter_mm: null,
+  thickness_mm: null,
+  shape: null,
+  orientation: null,
+  demonetized: false,
+  rarity: null,
+  estimated_value_low: null,
+  estimated_value_high: null,
+  grade: null,
 }
 
 export function CapturePage() {
@@ -43,11 +59,14 @@ export function CapturePage() {
     setError(null)
     try {
       const compressed = await compressImage(raw)
-      setFrontBlob(compressed)
-      setFrontUrl(URL.createObjectURL(compressed))
+      setStage('removing-bg-front')
+      const cutout = await removeBackground(compressed)
+      setFrontBlob(cutout)
+      setFrontUrl(URL.createObjectURL(cutout))
       setStage('capture-back')
     } catch (err) {
       setError((err as Error).message)
+      setStage('capture-front')
     }
   }
 
@@ -56,11 +75,13 @@ export function CapturePage() {
     setError(null)
     try {
       const compressed = await compressImage(raw)
-      setBackBlob(compressed)
-      setBackUrl(URL.createObjectURL(compressed))
+      setStage('removing-bg-back')
+      const cutout = await removeBackground(compressed)
+      setBackBlob(cutout)
+      setBackUrl(URL.createObjectURL(cutout))
       setStage('extracting')
 
-      const result = await coinApi.extractCoin(frontBlob, compressed)
+      const result = await coinApi.extractCoin(frontBlob, cutout)
       setFields(result.fields)
       setQualityScore(result.image_quality_score)
       setMintName(result.mint_name)
@@ -177,6 +198,8 @@ export function CapturePage() {
 
       {stage === 'capture-front' && <CameraCapture label="Front (obverse) of the coin" onCapture={handleFrontCaptured} />}
 
+      {stage === 'removing-bg-front' && <p className="page-hint">Removing background…</p>}
+
       {stage === 'capture-back' && (
         <>
           {frontUrl && (
@@ -186,6 +209,17 @@ export function CapturePage() {
             </div>
           )}
           <CameraCapture label="Back (reverse) of the coin" onCapture={handleBackCaptured} />
+        </>
+      )}
+
+      {stage === 'removing-bg-back' && (
+        <>
+          {frontUrl && (
+            <div className="side-preview">
+              <img src={frontUrl} alt="Front captured" />
+            </div>
+          )}
+          <p className="page-hint">Removing background…</p>
         </>
       )}
 
@@ -205,6 +239,8 @@ export function CapturePage() {
             {frontUrl && <img src={frontUrl} alt="Front" />}
             {backUrl && <img src={backUrl} alt="Back" />}
           </div>
+
+          {fields.rarity && <RarityBadge rarity={fields.rarity} />}
 
           <label>
             Country
@@ -245,6 +281,8 @@ export function CapturePage() {
               onBlur={handleFieldBlur}
             />
           </label>
+
+          <CoinExtraFields fields={fields} onChange={setFields} />
 
           {mintName && (
             <p className="page-hint">
