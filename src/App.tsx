@@ -3,9 +3,10 @@ import { CapturePage } from './pages/CapturePage'
 import { CoinsPage } from './pages/CoinsPage'
 import { MintsPage } from './pages/MintsPage'
 import { AlbumsPage } from './pages/AlbumsPage'
+import { QueuePage } from './pages/QueuePage'
 import './App.css'
 
-type Tab = 'capture' | 'coins' | 'mints' | 'albums'
+type Tab = 'capture' | 'coins' | 'queue' | 'mints' | 'albums'
 
 function App() {
   const [tab, setTab] = useState<Tab>('capture')
@@ -19,6 +20,9 @@ function App() {
         <button type="button" className={tab === 'coins' ? 'active' : ''} onClick={() => setTab('coins')}>
           Coins
         </button>
+        <button type="button" className={tab === 'queue' ? 'active' : ''} onClick={() => setTab('queue')}>
+          Queue
+        </button>
         <button type="button" className={tab === 'mints' ? 'active' : ''} onClick={() => setTab('mints')}>
           Mints
         </button>
@@ -29,6 +33,7 @@ function App() {
       <main>
         {tab === 'capture' && <CapturePage />}
         {tab === 'coins' && <CoinsPage />}
+        {tab === 'queue' && <QueuePage />}
         {tab === 'mints' && <MintsPage />}
         {tab === 'albums' && <AlbumsPage />}
       </main>

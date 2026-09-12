@@ -340,6 +340,18 @@ Deno.serve(async (req) => {
 });
 ```
 
+#### 5.6 Batch Mode Processing
+
+*   **Purpose:** let the user capture many coins back-to-back (front + back photos only) without waiting on Gemini extraction for each one — extraction is deferred and runs automatically later, once the phone is on WiFi with the screen off, so it never competes with active use.
+*   **Mode toggle:** `CapturePage` has an Immediate/Batch switch (persisted in `localStorage`). In Immediate mode, behavior is unchanged from §5.1–§3.3. In Batch mode, once front+back are captured and background-removed (client-side steps unchanged), the pair of blobs is written to a local queue instead of being sent to `extract-coin`, and the capture screen immediately resets for the next coin.
+*   **Local queue:** IndexedDB (`src/lib/batchQueue.ts`), not the Cache API — these are opaque image blobs with app-defined metadata, not HTTP request/response pairs. One row per queued coin: `status` (`pending` / `processing` / `ready` / `error`), the two image blobs, `capturedAt`, and — once processed — the same fields `extract-coin` normally returns (`fields`, `qualityScore`, `mintName`, `mintId`, `markImageUrl`), or an `errorMessage`. Accessible from both the page (React) and the service worker, since IndexedDB is shared across both contexts.
+*   **Trigger — Background Sync, gated on WiFi + screen-off:** true idle detection isn't viable (the `IdleDetector` API needs an experimental `chrome://flags` toggle on Android, off by default, can't be enabled from code). Instead, every enqueue registers a Background Sync task (`process-coin-batch`). The service worker's `sync` handler (`src/sw.ts`) only proceeds if **both** hold, otherwise it throws so Background Sync retries later automatically:
+    1. `navigator.connection.type === 'wifi'`.
+    2. No open window client is currently visible (`self.clients.matchAll()` / `WindowClient.visibilityState`) — the closest proxy a web page has to "screen off"; also true if the user has simply switched to another app, which is an equally valid reason not to run.
+*   **No manual override.** There's deliberately no "process now" button — the point is hands-off processing while the phone is idle. The Queue tab is otherwise read-only aside from retrying an errored item (resets it to `pending` and re-registers the sync task — still fully automatic from there).
+*   **Review on reopen:** processed (`ready`) items appear in a new Queue tab (`src/pages/QueuePage.tsx`). Tapping one opens the same review/edit/duplicate-check/save form used by Immediate mode (extracted into `src/components/CoinReviewForm.tsx` so both paths share identical behavior) — extraction is deferred, but the user's manual review/duplicate/save decision is not, consistent with §3.5's manual-control requirement. Saving removes the item from the queue; discarding also removes it (nothing else to do with a reviewed candidate).
+*   **Reliability caveat:** Background Sync fires more reliably for PWAs added to the home screen (browser site-engagement heuristics) than for a plain open tab — worth installing the app to the home screen for this feature to behave as expected.
+
 ### 6. Open Items / Explicitly Out of Scope
 *   **Auth:** None. Anyone with the URL can use the app. Acceptable per personal-use requirement; revisit if the URL is ever shared or the app is exposed beyond a private link.
 *   **Offline support:** Not required initially — assume the device has connectivity when logging a coin.

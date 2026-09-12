@@ -29,6 +29,31 @@
   }
 }
 
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 12px;
+
+  button {
+    padding: 6px 14px;
+    background: none;
+    border: none;
+    font: inherit;
+    color: var(--text);
+    cursor: pointer;
+
+    &.active {
+      background: var(--accent);
+      color: var(--bg);
+    }
+    &:not(:last-child) {
+      border-right: 1px solid var(--border);
+    }
+  }
+}
+
 .page {
   padding: 24px 20px 40px;
 

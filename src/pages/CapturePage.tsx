@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
-import { coinApi, referenceApi, type CoinFields, type DuplicateMatch } from '../lib/api'
+import { coinApi, type CoinFields } from '../lib/api'
 import { compressImage, removeBackground } from '../lib/image'
+import { batchQueue, registerBatchSync } from '../lib/batchQueue'
 import { CameraCapture } from '../components/CameraCapture'
-import { CoinExtraFields } from '../components/CoinExtraFields'
-import { RarityBadge } from '../components/RarityBadge'
+import { CoinReviewForm } from '../components/CoinReviewForm'
 
-type Stage = 'capture-front' | 'removing-bg-front' | 'capture-back' | 'removing-bg-back' | 'extracting' | 'review' | 'saving' | 'saved'
+type Stage = 'capture-front' | 'removing-bg-front' | 'capture-back' | 'removing-bg-back' | 'extracting' | 'review' | 'saved'
+type CaptureMode = 'immediate' | 'batch'
+
+const MODE_STORAGE_KEY = 'numismatica_capture_mode'
 
 const EMPTY_FIELDS: CoinFields = {
   country: '',
@@ -30,6 +33,9 @@ const EMPTY_FIELDS: CoinFields = {
 }
 
 export function CapturePage() {
+  const [mode, setMode] = useState<CaptureMode>(
+    () => (localStorage.getItem(MODE_STORAGE_KEY) as CaptureMode | null) ?? 'immediate',
+  )
   const [stage, setStage] = useState<Stage>('capture-front')
   const [error, setError] = useState<string | null>(null)
   const [frontBlob, setFrontBlob] = useState<Blob | null>(null)
@@ -40,13 +46,8 @@ export function CapturePage() {
   const [qualityScore, setQualityScore] = useState<number | null>(null)
   const [mintName, setMintName] = useState<string | null>(null)
   const [markImageUrl, setMarkImageUrl] = useState<string | null>(null)
-  const [notes, setNotes] = useState('')
-  const [matches, setMatches] = useState<DuplicateMatch[]>([])
-  const [checkingDup, setCheckingDup] = useState(false)
   const [savedId, setSavedId] = useState<number | null>(null)
-  const [addingMint, setAddingMint] = useState(false)
-  const [newMintName, setNewMintName] = useState('')
-  const [savingMint, setSavingMint] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
 
   useEffect(() => {
     return () => {
@@ -54,6 +55,21 @@ export function CapturePage() {
       if (backUrl) URL.revokeObjectURL(backUrl)
     }
   }, [frontUrl, backUrl])
+
+  useEffect(() => {
+    if (mode === 'batch') refreshPendingCount()
+  }, [mode])
+
+  function handleModeChange(next: CaptureMode) {
+    setMode(next)
+    localStorage.setItem(MODE_STORAGE_KEY, next)
+  }
+
+  async function refreshPendingCount() {
+    const pending = await batchQueue.listByStatus('pending')
+    const processing = await batchQueue.listByStatus('processing')
+    setPendingCount(pending.length + processing.length)
+  }
 
   async function handleFrontCaptured(raw: Blob) {
     setError(null)
@@ -79,60 +95,25 @@ export function CapturePage() {
       const cutout = await removeBackground(compressed)
       setBackBlob(cutout)
       setBackUrl(URL.createObjectURL(cutout))
-      setStage('extracting')
 
+      if (mode === 'batch') {
+        await batchQueue.enqueue(frontBlob, cutout)
+        registerBatchSync()
+        await refreshPendingCount()
+        reset()
+        return
+      }
+
+      setStage('extracting')
       const result = await coinApi.extractCoin(frontBlob, cutout)
       setFields(result.fields)
       setQualityScore(result.image_quality_score)
       setMintName(result.mint_name)
       setMarkImageUrl(result.mark_image_url)
       setStage('review')
-      await runDuplicateCheck(result.fields)
     } catch (err) {
       setError((err as Error).message)
       setStage('capture-back')
-    }
-  }
-
-  async function runDuplicateCheck(candidate: CoinFields) {
-    if (!candidate.country || !candidate.denomination) return
-    setCheckingDup(true)
-    try {
-      const { matches } = await coinApi.checkDuplicate(candidate)
-      setMatches(matches)
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setCheckingDup(false)
-    }
-  }
-
-  async function handleFieldBlur() {
-    await runDuplicateCheck(fields)
-    try {
-      const { mint_name, mark_image_url } = await coinApi.resolveMint(fields.country, fields.mint_mark)
-      setMintName(mint_name)
-      setMarkImageUrl(mark_image_url)
-    } catch {
-      // best-effort preview lookup; save still resolves server-side
-    }
-  }
-
-  async function handleAddMint() {
-    if (!fields.country || !fields.mint_mark || !newMintName.trim()) return
-    setSavingMint(true)
-    setError(null)
-    try {
-      await referenceApi.createMint(fields.country, fields.mint_mark, newMintName.trim())
-      const { mint_name, mark_image_url } = await coinApi.resolveMint(fields.country, fields.mint_mark)
-      setMintName(mint_name)
-      setMarkImageUrl(mark_image_url)
-      setAddingMint(false)
-      setNewMintName('')
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setSavingMint(false)
     }
   }
 
@@ -148,51 +129,34 @@ export function CapturePage() {
     setQualityScore(null)
     setMintName(null)
     setMarkImageUrl(null)
-    setNotes('')
-    setMatches([])
     setError(null)
     setSavedId(null)
-    setAddingMint(false)
-    setNewMintName('')
   }
 
-  async function handleSaveNew() {
-    if (!frontBlob || !backBlob) return
-    setStage('saving')
-    setError(null)
-    try {
-      const { id } = await coinApi.saveCoin(fields, notes, qualityScore, frontBlob, backBlob)
-      setSavedId(id)
-      setStage('saved')
-    } catch (err) {
-      setError((err as Error).message)
-      setStage('review')
-    }
-  }
-
-  async function handleConfirmDuplicate(matchId: number, replaceImage: boolean) {
-    setStage('saving')
-    setError(null)
-    try {
-      const { id } = await coinApi.saveDuplicate(
-        matchId,
-        replaceImage,
-        notes,
-        replaceImage ? frontBlob : null,
-        replaceImage ? backBlob : null,
-        replaceImage ? qualityScore : null,
-      )
-      setSavedId(id)
-      setStage('saved')
-    } catch (err) {
-      setError((err as Error).message)
-      setStage('review')
-    }
+  function handleSaved(id: number) {
+    setSavedId(id)
+    setStage('saved')
   }
 
   return (
     <div className="page">
       <h1>Capture</h1>
+
+      <div className="mode-toggle">
+        <button type="button" className={mode === 'immediate' ? 'active' : ''} onClick={() => handleModeChange('immediate')}>
+          Immediate
+        </button>
+        <button type="button" className={mode === 'batch' ? 'active' : ''} onClick={() => handleModeChange('batch')}>
+          Batch
+        </button>
+      </div>
+      {mode === 'batch' && (
+        <p className="page-hint">
+          Captures are queued locally and processed automatically once the phone is on WiFi with the screen off. Check the
+          Queue tab to review results.
+          {pendingCount > 0 && ` (${pendingCount} queued)`}
+        </p>
+      )}
 
       {error && <p className="error">{error}</p>}
 
@@ -233,141 +197,19 @@ export function CapturePage() {
         </>
       )}
 
-      {(stage === 'review' || stage === 'saving') && (
-        <div className="capture-review">
-          <div className="side-preview">
-            {frontUrl && <img src={frontUrl} alt="Front" />}
-            {backUrl && <img src={backUrl} alt="Back" />}
-          </div>
-
-          {fields.rarity && <RarityBadge rarity={fields.rarity} />}
-
-          <label>
-            Country
-            <input value={fields.country} onChange={(e) => setFields({ ...fields, country: e.target.value })} onBlur={handleFieldBlur} />
-          </label>
-          <label>
-            Denomination
-            <input
-              value={fields.denomination}
-              onChange={(e) => setFields({ ...fields, denomination: e.target.value })}
-              onBlur={handleFieldBlur}
-            />
-          </label>
-          <label>
-            Mint year
-            <input
-              type="number"
-              value={fields.mint_year ?? ''}
-              onChange={(e) => setFields({ ...fields, mint_year: e.target.value ? Number(e.target.value) : null })}
-              onBlur={handleFieldBlur}
-            />
-          </label>
-          <label>
-            Mint mark
-            <input
-              value={fields.mint_mark ?? ''}
-              onChange={(e) => setFields({ ...fields, mint_mark: e.target.value || null })}
-              onBlur={handleFieldBlur}
-            />
-          </label>
-
-          <label>
-            Commemorative theme
-            <input
-              placeholder="Leave blank for a standard coin"
-              value={fields.commemorative_theme ?? ''}
-              onChange={(e) => setFields({ ...fields, commemorative_theme: e.target.value || null })}
-              onBlur={handleFieldBlur}
-            />
-          </label>
-
-          <CoinExtraFields fields={fields} onChange={setFields} />
-
-          {mintName && (
-            <p className="page-hint">
-              Mint: {mintName}
-              {markImageUrl && <img src={markImageUrl} alt="Reference mint mark" className="mark-image-preview" />}
-            </p>
-          )}
-
-          {!mintName && fields.country && fields.mint_mark && !addingMint && (
-            <div className="page-hint">
-              No mint on file for {fields.country} / {fields.mint_mark}.{' '}
-              <button type="button" className="mint-image-btn" onClick={() => setAddingMint(true)}>
-                Add it now
-              </button>
-            </div>
-          )}
-
-          {addingMint && (
-            <div className="add-mint-inline">
-              <p className="page-hint">
-                New mint: {fields.country} / {fields.mint_mark}
-              </p>
-              <input
-                placeholder="Mint name (e.g. Denver)"
-                value={newMintName}
-                onChange={(e) => setNewMintName(e.target.value)}
-              />
-              <button type="button" onClick={handleAddMint} disabled={savingMint || !newMintName.trim()}>
-                {savingMint ? 'Saving…' : 'Save mint'}
-              </button>
-              <p className="page-hint">You can attach a reference photo for this mark later from the Mints tab.</p>
-            </div>
-          )}
-
-          {qualityScore != null && <p className="page-hint">Image quality score: {qualityScore}</p>}
-          <label>
-            Notes
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
-          </label>
-
-          {checkingDup && <p className="page-hint">Checking for duplicates…</p>}
-
-          {matches.length > 0 && (
-            <div className="duplicate-banner">
-              <p>
-                <strong>Possible duplicate{matches.length > 1 ? 's' : ''} found.</strong> Is this the same coin you
-                already own?
-              </p>
-              {matches.map((m) => (
-                <div className="duplicate-match" key={m.id}>
-                  {m.thumbnail_url && <img src={m.thumbnail_url} alt="Existing coin" />}
-                  <div className="duplicate-match-info">
-                    <p>
-                      Owned: {m.quantity} · Existing quality: {m.image_quality_score ?? '—'} · New quality:{' '}
-                      {qualityScore ?? '—'}
-                    </p>
-                    {m.personal_notes && <p className="page-hint">{m.personal_notes}</p>}
-                    <div className="duplicate-actions">
-                      <button type="button" onClick={() => handleConfirmDuplicate(m.id, false)} disabled={stage === 'saving'}>
-                        Duplicate — keep existing photos
-                      </button>
-                      <button type="button" onClick={() => handleConfirmDuplicate(m.id, true)} disabled={stage === 'saving'}>
-                        Duplicate — replace photos
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <button type="button" onClick={handleSaveNew} disabled={stage === 'saving'}>
-                Not a duplicate — save as new
-              </button>
-            </div>
-          )}
-
-          {matches.length === 0 && !checkingDup && (
-            <div className="capture-actions">
-              <button type="button" onClick={handleSaveNew} disabled={stage === 'saving' || !fields.country || !fields.denomination}>
-                {stage === 'saving' ? 'Saving…' : 'Save'}
-              </button>
-              <button type="button" className="secondary" onClick={reset} disabled={stage === 'saving'}>
-                Discard
-              </button>
-            </div>
-          )}
-        </div>
+      {stage === 'review' && frontBlob && backBlob && (
+        <CoinReviewForm
+          frontUrl={frontUrl}
+          backUrl={backUrl}
+          frontBlob={frontBlob}
+          backBlob={backBlob}
+          initialFields={fields}
+          initialQualityScore={qualityScore}
+          initialMintName={mintName}
+          initialMarkImageUrl={markImageUrl}
+          onSaved={handleSaved}
+          onDiscard={reset}
+        />
       )}
 
       {stage === 'saved' && (

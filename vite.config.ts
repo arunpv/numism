@@ -9,7 +9,13 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
-      workbox: {
+      // Custom sw.ts (Batch mode's Background Sync handler — see
+      // coin_app_requirements.md §5.6) instead of the generated default,
+      // so injectManifest replaces generateSW here.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectManifest: {
         // The background-removal library's onnxruntime WASM runtime is
         // 20MB+ — far past workbox's default 2MB precache limit, and not
         // worth precaching at install time anyway (it's fetched lazily the
