@@ -8,7 +8,8 @@
 // manual "Process now" button (src/lib/processBatch.ts) that bypasses
 // these gates for an explicit foreground click — that path runs on the
 // main thread and never touches this file.
-import { precacheAndRoute } from 'workbox-precaching'
+import { clientsClaim } from 'workbox-core'
+import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 import { batchQueue } from './lib/batchQueue'
 
 declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<{ url: string; revision: string | null }> }
@@ -17,6 +18,16 @@ interface SyncEvent extends ExtendableEvent {
   readonly tag: string
 }
 
+// registerType: 'autoUpdate' (vite.config.ts) only auto-injects
+// skipWaiting/clientsClaim for the default generateSW strategy — with a
+// hand-written injectManifest service worker like this one, they must be
+// called explicitly, or a new deploy's SW gets stuck "waiting" behind the
+// previous one, which keeps serving a stale precached index.html pointing
+// at JS chunk hashes the server no longer has (breaks opening the app).
+self.skipWaiting()
+clientsClaim()
+
+cleanupOutdatedCaches()
 precacheAndRoute(self.__WB_MANIFEST)
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
