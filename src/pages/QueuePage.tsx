@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { batchQueue, registerBatchSync, type QueueItem } from '../lib/batchQueue'
+import { processQueueNow } from '../lib/processBatch'
 import { CoinReviewForm } from '../components/CoinReviewForm'
 
 // Batch mode's review-on-reopen screen — see coin_app_requirements.md §5.6.
@@ -10,6 +11,7 @@ import { CoinReviewForm } from '../components/CoinReviewForm'
 export function QueuePage() {
   const [items, setItems] = useState<QueueItem[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [processingNow, setProcessingNow] = useState(false)
 
   useEffect(() => {
     refresh()
@@ -25,6 +27,16 @@ export function QueuePage() {
     await batchQueue.setStatus(id, 'pending')
     registerBatchSync()
     await refresh()
+  }
+
+  async function handleProcessNow() {
+    setProcessingNow(true)
+    try {
+      await processQueueNow(refresh)
+    } finally {
+      setProcessingNow(false)
+      await refresh()
+    }
   }
 
   async function handleSaved(id: number) {
@@ -65,8 +77,11 @@ export function QueuePage() {
         {pending.length} pending · {processing.length} processing · {ready.length} ready to review · {errored.length} errored
       </p>
       <p className="page-hint">
-        Pending items process automatically once the phone is on WiFi with the screen off — there's no manual "process now."
+        Pending items also process automatically once the phone is on WiFi with the screen off.
       </p>
+      <button type="button" onClick={handleProcessNow} disabled={processingNow || pending.length === 0}>
+        {processingNow ? 'Processing…' : 'Process now'}
+      </button>
 
       {items.length === 0 && <p className="page-hint">Nothing queued. Switch Capture to Batch mode to add coins here.</p>}
 

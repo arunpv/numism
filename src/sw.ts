@@ -4,7 +4,10 @@
 // gates pass: WiFi (navigator.connection) and no visible app window
 // (WindowClient.visibilityState — the closest proxy a web page has to
 // "screen off"/"not in use"). Neither gate passing throws, which makes
-// Background Sync retry automatically later; no manual override exists.
+// Background Sync retry automatically later. The Queue tab also offers a
+// manual "Process now" button (src/lib/processBatch.ts) that bypasses
+// these gates for an explicit foreground click — that path runs on the
+// main thread and never touches this file.
 import { precacheAndRoute } from 'workbox-precaching'
 import { batchQueue } from './lib/batchQueue'
 
