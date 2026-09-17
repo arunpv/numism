@@ -22,12 +22,24 @@ async function postRaw<T>(name: string, body: BodyInit, extraHeaders: Record<str
   return json
 }
 
+export type MintMarkPosition = 'first_digit' | 'last_digit'
+
+// One row per resolution rule (see coin_app_requirements.md §3.7) — a
+// (country, mint_mark) pair can resolve to more than one mint depending on
+// mint_year (condition_type 'year_range') or the mark's position relative
+// to a digit of the year ('position'); a plain, unconditional mapping is
+// 'default'. `id` here is the rule's id, `mint_id` the underlying mint
+// identity (shared across every rule that resolves to the same mint).
 export type Mint = {
   id: number
   country: string
   mint_mark: string
+  condition_type: 'default' | 'year_range' | 'position'
+  year_min: number | null
+  year_max: number | null
+  position: MintMarkPosition | null
+  mint_id: number
   mint_name: string
-  created_at: string
   mark_image_path: string | null
   mark_image_url: string | null
 }
@@ -41,9 +53,24 @@ export type Album = {
 
 export const referenceApi = {
   listMints: () => callFunction<{ data: Mint[] }>('manage-reference', { table: 'mints', action: 'list' }),
-  createMint: (country: string, mint_mark: string, mint_name: string) =>
-    callFunction<{ data: Mint }>('manage-reference', { table: 'mints', action: 'create', country, mint_mark, mint_name }),
-  deleteMint: (id: number) => callFunction<{ ok: true }>('manage-reference', { table: 'mints', action: 'delete', id }),
+  createMint: (
+    country: string,
+    mint_mark: string,
+    mint_name: string,
+    condition?: { type: 'year_range'; year_min: number; year_max: number } | { type: 'position'; position: MintMarkPosition },
+  ) =>
+    callFunction<{ data: Mint }>('manage-reference', {
+      table: 'mints',
+      action: 'create',
+      country,
+      mint_mark,
+      mint_name,
+      condition_type: condition?.type,
+      year_min: condition?.type === 'year_range' ? condition.year_min : undefined,
+      year_max: condition?.type === 'year_range' ? condition.year_max : undefined,
+      position: condition?.type === 'position' ? condition.position : undefined,
+    }),
+  deleteMint: (ruleId: number) => callFunction<{ ok: true }>('manage-reference', { table: 'mints', action: 'delete', id: ruleId }),
 
   uploadMintImage: (mintId: number, image: Blob | null) => {
     const form = new FormData()
@@ -77,6 +104,7 @@ export type CoinFields = {
   denomination: string
   mint_year: number | null
   mint_mark: string | null
+  mint_mark_position: MintMarkPosition | null
   commemorative_theme: string | null
   period: string | null
   value: number | null
@@ -155,10 +183,12 @@ export const coinApi = {
 
   checkDuplicate: (fields: CoinFields) => callFunction<{ matches: DuplicateMatch[] }>('check-duplicate', fields),
 
-  resolveMint: (country: string, mint_mark: string | null) =>
+  resolveMint: (country: string, mint_mark: string | null, mint_year: number | null, mint_mark_position: MintMarkPosition | null) =>
     callFunction<{ mint_id: number | null; mint_name: string | null; mark_image_url: string | null }>('resolve-mint', {
       country,
       mint_mark,
+      mint_year,
+      mint_mark_position,
     }),
 
   saveCoin: (
@@ -173,6 +203,7 @@ export const coinApi = {
     form.set('denomination', fields.denomination)
     if (fields.mint_year != null) form.set('mint_year', String(fields.mint_year))
     if (fields.mint_mark) form.set('mint_mark', fields.mint_mark)
+    if (fields.mint_mark_position) form.set('mint_mark_position', fields.mint_mark_position)
     if (fields.commemorative_theme) form.set('commemorative_theme', fields.commemorative_theme)
     if (personal_notes) form.set('personal_notes', personal_notes)
     if (image_quality_score != null) form.set('image_quality_score', String(image_quality_score))

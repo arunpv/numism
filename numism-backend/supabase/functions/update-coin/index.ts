@@ -8,7 +8,7 @@
 // user's call: a full/out-of-range pocket rejects the save outright.
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
-import { resolveMintId } from "../_shared/resolve-mint.ts";
+import { resolveMint } from "../_shared/resolve-mint.ts";
 import { callGeminiAssessment, type CoinImage } from "../_shared/coin-schema.ts";
 
 export default {
@@ -20,6 +20,7 @@ export default {
       denomination,
       mint_year,
       mint_mark,
+      mint_mark_position,
       commemorative_theme,
       personal_notes,
       album_id,
@@ -48,7 +49,14 @@ export default {
 
     let mint_id: number | null;
     try {
-      mint_id = await resolveMintId(ctx.supabaseAdmin, country, mint_mark ?? null);
+      const resolved = await resolveMint(
+        ctx.supabaseAdmin,
+        country,
+        mint_mark ?? null,
+        mint_year ?? null,
+        mint_mark_position ?? null,
+      );
+      mint_id = resolved?.id ?? null;
     } catch (err) {
       return Response.json({ error: (err as Error).message }, { status: 500 });
     }
@@ -166,6 +174,7 @@ export default {
         denomination: denomination.trim(),
         mint_year: mint_year ?? null,
         mint_mark: mint_mark || null,
+        mint_mark_position: mint_mark_position || null,
         mint_id,
         commemorative_theme: commemorative_theme || null,
         personal_notes: personal_notes || null,

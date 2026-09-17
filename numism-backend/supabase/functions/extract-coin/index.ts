@@ -5,6 +5,7 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
 import { callGemini, callGeminiMintMatch, type CoinImage } from "../_shared/coin-schema.ts";
+import { resolveMint } from "../_shared/resolve-mint.ts";
 
 export default {
   fetch: withSupabase({ auth: ["publishable"] }, async (req, ctx) => {
@@ -26,38 +27,49 @@ export default {
       // §3.7: if we already have known mint marks on file for this country,
       // re-examine the image constrained to that set instead of trusting
       // the free-text first-pass guess.
-      const { data: knownMintRows, error: mintsError } = await ctx.supabaseAdmin
-        .from("mints")
+      const { data: knownRuleRows, error: mintsError } = await ctx.supabaseAdmin
+        .from("mint_mark_rules")
         .select("mint_mark")
         .ilike("country", fields.country.trim());
       if (mintsError) return Response.json({ error: mintsError.message }, { status: 500 });
 
-      const knownMarks = [...new Set((knownMintRows ?? []).map((m) => m.mint_mark))];
+      const knownMarks = [...new Set((knownRuleRows ?? []).map((m) => m.mint_mark))];
+      let mint_mark_position: "first_digit" | "last_digit" | null = null;
       if (knownMarks.length > 0) {
-        fields.mint_mark = await callGeminiMintMatch(apiKey, front, back, fields.country, knownMarks);
+        const matched = await callGeminiMintMatch(apiKey, front, back, fields.country, knownMarks);
+        fields.mint_mark = matched.mint_mark;
+        mint_mark_position = matched.mint_mark_position;
       }
 
       let mint_id: number | null = null;
       let mint_name: string | null = null;
       let mark_image_url: string | null = null;
-      if (fields.mint_mark) {
-        const { data: mint, error: mintError } = await ctx.supabaseAdmin
-          .from("mints")
-          .select("id, mint_name, mark_image_path")
-          .ilike("country", fields.country.trim())
-          .ilike("mint_mark", fields.mint_mark.trim())
-          .maybeSingle();
-        if (mintError) return Response.json({ error: mintError.message }, { status: 500 });
-        mint_id = mint?.id ?? null;
-        mint_name = mint?.mint_name ?? null;
-        if (mint?.mark_image_path) {
+      try {
+        const resolved = await resolveMint(
+          ctx.supabaseAdmin,
+          fields.country,
+          fields.mint_mark,
+          fields.mint_year,
+          mint_mark_position,
+        );
+        mint_id = resolved?.id ?? null;
+        mint_name = resolved?.mint_name ?? null;
+        if (resolved?.mark_image_path) {
           mark_image_url =
-            (await ctx.supabaseAdmin.storage.from("mint-marks").createSignedUrl(mint.mark_image_path, 3600)).data
+            (await ctx.supabaseAdmin.storage.from("mint-marks").createSignedUrl(resolved.mark_image_path, 3600)).data
               ?.signedUrl ?? null;
         }
+      } catch (err) {
+        return Response.json({ error: (err as Error).message }, { status: 500 });
       }
 
-      return Response.json({ fields, image_quality_score, mint_id, mint_name, mark_image_url });
+      return Response.json({
+        fields: { ...fields, mint_mark_position },
+        image_quality_score,
+        mint_id,
+        mint_name,
+        mark_image_url,
+      });
     } catch (err) {
       return Response.json({ error: (err as Error).message }, { status: 502 });
     }

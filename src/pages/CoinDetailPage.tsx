@@ -36,6 +36,7 @@ export function CoinDetailPage({ coinId, onBack }: Props) {
         denomination: coinData.denomination,
         mint_year: coinData.mint_year,
         mint_mark: coinData.mint_mark,
+        mint_mark_position: coinData.mint_mark_position,
         commemorative_theme: coinData.commemorative_theme,
         personal_notes: coinData.personal_notes,
         album_id: coinData.album_id,
@@ -76,6 +77,7 @@ export function CoinDetailPage({ coinId, onBack }: Props) {
         denomination: data.denomination,
         mint_year: data.mint_year,
         mint_mark: data.mint_mark,
+        mint_mark_position: data.mint_mark_position,
         commemorative_theme: data.commemorative_theme,
         personal_notes: data.personal_notes,
         album_id: data.album_id,
@@ -158,6 +160,19 @@ export function CoinDetailPage({ coinId, onBack }: Props) {
             value={fields.mint_mark ?? ''}
             onChange={(e) => setFields({ ...fields, mint_mark: e.target.value || null })}
           />
+        </label>
+        <label>
+          Mark position
+          <select
+            value={fields.mint_mark_position ?? ''}
+            onChange={(e) =>
+              setFields({ ...fields, mint_mark_position: (e.target.value || null) as typeof fields.mint_mark_position })
+            }
+          >
+            <option value="">—</option>
+            <option value="first_digit">Below first digit of year</option>
+            <option value="last_digit">Below last digit of year</option>
+          </select>
         </label>
         {coin?.mints && <p className="page-hint">Mint: {coin.mints.mint_name}</p>}
         <label>

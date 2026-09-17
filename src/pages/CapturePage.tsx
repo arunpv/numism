@@ -15,6 +15,7 @@ const EMPTY_FIELDS: CoinFields = {
   denomination: '',
   mint_year: null,
   mint_mark: '',
+  mint_mark_position: null,
   commemorative_theme: null,
   period: null,
   value: null,

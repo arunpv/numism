@@ -172,8 +172,13 @@ export async function callGeminiAssessment(
 
 // Second pass (§3.7): re-examine the mint mark constrained to the set of
 // marks already on file for this country, so the result is guaranteed to
-// either exactly match a `mints` row or come back null — no free-text guess
-// to fuzzy-match later. Only called when `knownMarks` is non-empty.
+// either exactly match a known mark or come back null — no free-text guess
+// to fuzzy-match later. Only called when `knownMarks` is non-empty. Also
+// asks for the mark's position relative to a digit of the year, since some
+// marks mean different mints depending on placement (e.g. India's "★" below
+// the first vs last digit of the year) — irrelevant for most marks, so the
+// model is told to leave it null unless that's specifically what
+// distinguishes the mint.
 export async function callGeminiMintMatch(
   apiKey: string,
   front: CoinImage,
@@ -190,8 +195,18 @@ export async function callGeminiMintMatch(
         enum: [...knownMarks, null],
         description: "Must be exactly one of the known marks, or null if none match / not legible.",
       },
+      mint_mark_position: {
+        type: "string",
+        nullable: true,
+        enum: ["first_digit", "last_digit", null],
+        description:
+          "Only set this if the mark sits directly below (or beside, in the same position numismatists " +
+          "describe as 'below') a specific digit of the mint year, AND that exact placement is what would " +
+          "distinguish which mint struck the coin — not just where the mark happens to be. Leave null for " +
+          "the common case where the mark's meaning doesn't depend on its position.",
+      },
     },
-    required: ["mint_mark"],
+    required: ["mint_mark", "mint_mark_position"],
   };
 
   const result = await callGeminiRaw(
@@ -200,8 +215,12 @@ export async function callGeminiMintMatch(
     `These two images are the front and back of a coin from ${country}. The known mint marks for this ` +
       `country are: ${knownMarks.join(", ")}. Look closely at both sides of the coin and determine which of ` +
       "these mint marks (if any) appears on it. A mark may be a letter or a shape (circle, diamond, star, " +
-      "dot, etc). If none of the listed marks are present or legible, respond with null rather than guessing.",
+      "dot, etc). If none of the listed marks are present or legible, respond with null rather than guessing. " +
+      "Also determine whether the mark's position relative to a digit of the mint year is meaningful here.",
     schema,
   );
-  return result.mint_mark as string | null;
+  return {
+    mint_mark: result.mint_mark as string | null,
+    mint_mark_position: result.mint_mark_position as "first_digit" | "last_digit" | null,
+  };
 }

@@ -65,10 +65,15 @@ export function CoinReviewForm({
     }
   }
 
-  async function handleFieldBlur() {
-    await runDuplicateCheck(fields)
+  async function handleFieldBlur(candidate: CoinFields = fields) {
+    await runDuplicateCheck(candidate)
     try {
-      const { mint_name, mark_image_url } = await coinApi.resolveMint(fields.country, fields.mint_mark)
+      const { mint_name, mark_image_url } = await coinApi.resolveMint(
+        candidate.country,
+        candidate.mint_mark,
+        candidate.mint_year,
+        candidate.mint_mark_position,
+      )
       setMintName(mint_name)
       setMarkImageUrl(mark_image_url)
     } catch {
@@ -82,7 +87,12 @@ export function CoinReviewForm({
     setError(null)
     try {
       await referenceApi.createMint(fields.country, fields.mint_mark, newMintName.trim())
-      const { mint_name, mark_image_url } = await coinApi.resolveMint(fields.country, fields.mint_mark)
+      const { mint_name, mark_image_url } = await coinApi.resolveMint(
+        fields.country,
+        fields.mint_mark,
+        fields.mint_year,
+        fields.mint_mark_position,
+      )
       setMintName(mint_name)
       setMarkImageUrl(mark_image_url)
       setAddingMint(false)
@@ -138,14 +148,14 @@ export function CoinReviewForm({
 
       <label>
         Country
-        <input value={fields.country} onChange={(e) => setFields({ ...fields, country: e.target.value })} onBlur={handleFieldBlur} />
+        <input value={fields.country} onChange={(e) => setFields({ ...fields, country: e.target.value })} onBlur={() => handleFieldBlur()} />
       </label>
       <label>
         Denomination
         <input
           value={fields.denomination}
           onChange={(e) => setFields({ ...fields, denomination: e.target.value })}
-          onBlur={handleFieldBlur}
+          onBlur={() => handleFieldBlur()}
         />
       </label>
       <label>
@@ -154,7 +164,7 @@ export function CoinReviewForm({
           type="number"
           value={fields.mint_year ?? ''}
           onChange={(e) => setFields({ ...fields, mint_year: e.target.value ? Number(e.target.value) : null })}
-          onBlur={handleFieldBlur}
+          onBlur={() => handleFieldBlur()}
         />
       </label>
       <label>
@@ -162,8 +172,23 @@ export function CoinReviewForm({
         <input
           value={fields.mint_mark ?? ''}
           onChange={(e) => setFields({ ...fields, mint_mark: e.target.value || null })}
-          onBlur={handleFieldBlur}
+          onBlur={() => handleFieldBlur()}
         />
+      </label>
+      <label>
+        Mark position
+        <select
+          value={fields.mint_mark_position ?? ''}
+          onChange={(e) => {
+            const next = { ...fields, mint_mark_position: (e.target.value || null) as CoinFields['mint_mark_position'] }
+            setFields(next)
+            handleFieldBlur(next)
+          }}
+        >
+          <option value="">—</option>
+          <option value="first_digit">Below first digit of year</option>
+          <option value="last_digit">Below last digit of year</option>
+        </select>
       </label>
 
       <label>
@@ -172,7 +197,7 @@ export function CoinReviewForm({
           placeholder="Leave blank for a standard coin"
           value={fields.commemorative_theme ?? ''}
           onChange={(e) => setFields({ ...fields, commemorative_theme: e.target.value || null })}
-          onBlur={handleFieldBlur}
+          onBlur={() => handleFieldBlur()}
         />
       </label>
 

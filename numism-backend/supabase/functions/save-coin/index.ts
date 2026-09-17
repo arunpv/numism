@@ -2,7 +2,7 @@
 // identity row + its image. Duplicates go through save-duplicate instead.
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
-import { resolveMintId } from "../_shared/resolve-mint.ts";
+import { resolveMint } from "../_shared/resolve-mint.ts";
 
 export default {
   fetch: withSupabase({ auth: ["publishable"] }, async (req, ctx) => {
@@ -11,6 +11,7 @@ export default {
     const denomination = form.get("denomination") as string;
     const mint_year = form.get("mint_year") ? Number(form.get("mint_year")) : null;
     const mint_mark = (form.get("mint_mark") as string) || null;
+    const mint_mark_position = (form.get("mint_mark_position") as string) || null;
     const commemorative_theme = (form.get("commemorative_theme") as string) || null;
     const personal_notes = (form.get("personal_notes") as string) || null;
     const image_quality_score = form.get("image_quality_score") ? Number(form.get("image_quality_score")) : null;
@@ -38,7 +39,8 @@ export default {
 
     let mint_id: number | null;
     try {
-      mint_id = await resolveMintId(ctx.supabaseAdmin, country, mint_mark);
+      const resolved = await resolveMint(ctx.supabaseAdmin, country, mint_mark, mint_year, mint_mark_position);
+      mint_id = resolved?.id ?? null;
     } catch (err) {
       return Response.json({ error: (err as Error).message }, { status: 500 });
     }
@@ -65,6 +67,7 @@ export default {
           denomination,
           mint_year,
           mint_mark,
+          mint_mark_position,
           mint_id,
           commemorative_theme,
           personal_notes,

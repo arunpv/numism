@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react'
-import { referenceApi, type Mint } from '../lib/api'
+import { referenceApi, type Mint, type MintMarkPosition } from '../lib/api'
+
+type ConditionType = 'default' | 'year_range' | 'position'
+
+function conditionLabel(m: Mint): string {
+  if (m.condition_type === 'year_range') return `${m.year_min}–${m.year_max}`
+  if (m.condition_type === 'position') return m.position === 'first_digit' ? 'below first digit' : 'below last digit'
+  return ''
+}
 
 export function MintsPage() {
   const [mints, setMints] = useState<Mint[]>([])
@@ -8,6 +16,10 @@ export function MintsPage() {
   const [country, setCountry] = useState('')
   const [mintMark, setMintMark] = useState('')
   const [mintName, setMintName] = useState('')
+  const [conditionType, setConditionType] = useState<ConditionType>('default')
+  const [yearMin, setYearMin] = useState('')
+  const [yearMax, setYearMax] = useState('')
+  const [position, setPosition] = useState<MintMarkPosition>('first_digit')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -32,10 +44,19 @@ export function MintsPage() {
     setSaving(true)
     setError(null)
     try {
-      await referenceApi.createMint(country, mintMark, mintName)
+      const condition =
+        conditionType === 'year_range'
+          ? ({ type: 'year_range', year_min: Number(yearMin), year_max: Number(yearMax) } as const)
+          : conditionType === 'position'
+            ? ({ type: 'position', position } as const)
+            : undefined
+      await referenceApi.createMint(country, mintMark, mintName, condition)
       setCountry('')
       setMintMark('')
       setMintName('')
+      setConditionType('default')
+      setYearMin('')
+      setYearMax('')
       await load()
     } catch (e) {
       setError((e as Error).message)
@@ -59,8 +80,8 @@ export function MintsPage() {
     e.target.value = ''
     setError(null)
     try {
-      const { mark_image_url } = await referenceApi.uploadMintImage(mint.id, file)
-      setMints((prev) => prev.map((m) => (m.id === mint.id ? { ...m, mark_image_url } : m)))
+      const { mark_image_url } = await referenceApi.uploadMintImage(mint.mint_id, file)
+      setMints((prev) => prev.map((m) => (m.mint_id === mint.mint_id ? { ...m, mark_image_url } : m)))
     } catch (e) {
       setError((e as Error).message)
     }
@@ -85,10 +106,44 @@ export function MintsPage() {
         <input placeholder="Country" value={country} onChange={(e) => setCountry(e.target.value)} required />
         <input placeholder="Mint mark (e.g. D, circle)" value={mintMark} onChange={(e) => setMintMark(e.target.value)} required />
         <input placeholder="Mint name (e.g. Denver)" value={mintName} onChange={(e) => setMintName(e.target.value)} required />
+        <select value={conditionType} onChange={(e) => setConditionType(e.target.value as ConditionType)}>
+          <option value="default">Always means this mint</option>
+          <option value="year_range">Only for a year range</option>
+          <option value="position">Only when the mark is in this position</option>
+        </select>
+        {conditionType === 'year_range' && (
+          <>
+            <input
+              type="number"
+              placeholder="From year"
+              value={yearMin}
+              onChange={(e) => setYearMin(e.target.value)}
+              required
+            />
+            <input
+              type="number"
+              placeholder="To year"
+              value={yearMax}
+              onChange={(e) => setYearMax(e.target.value)}
+              required
+            />
+          </>
+        )}
+        {conditionType === 'position' && (
+          <select value={position} onChange={(e) => setPosition(e.target.value as MintMarkPosition)}>
+            <option value="first_digit">Below first digit of year</option>
+            <option value="last_digit">Below last digit of year</option>
+          </select>
+        )}
         <button type="submit" disabled={saving}>
-          {saving ? 'Adding…' : 'Add mint'}
+          {saving ? 'Adding…' : 'Add rule'}
         </button>
       </form>
+      <p className="page-hint">
+        Adding a rule for a mint name already on file (same country + name) reuses that mint identity — use this to
+        give one mint more than one rule, e.g. a plain default plus a year-range or position override for the same
+        mark.
+      </p>
 
       {error && <p className="error">{error}</p>}
       {loading ? (
@@ -108,7 +163,8 @@ export function MintsPage() {
                     <span className="mint-mark-thumb mint-mark-thumb-empty" />
                   )}
                   <span className="mint-row-text">
-                    <strong>{m.mint_mark}</strong> — {m.mint_name}
+                    <strong>{m.mint_mark}</strong>
+                    {conditionLabel(m) && <span className="page-hint"> ({conditionLabel(m)})</span>} — {m.mint_name}
                   </span>
                   <label className="mint-image-btn">
                     {m.mark_image_url ? 'Replace photo' : 'Add photo'}
