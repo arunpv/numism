@@ -12,9 +12,7 @@ export default {
 
     let query = ctx.supabaseAdmin
       .from("personal_coins")
-      .select(
-        "id, image_path, image_quality_score, personal_notes, quantity, album_id, page_number, pocket_number",
-      )
+      .select("id, image_path, image_quality_score, personal_notes, album_id, page_number, pocket_number")
       .eq("country", country)
       .eq("denomination", denomination);
 

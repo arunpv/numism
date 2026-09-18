@@ -47,18 +47,19 @@ A personal-use web application (installable as a PWA on mobile) to capture image
 #### 3.5 Duplicate Detection
 *   **Match key:** a coin is considered a likely duplicate when `country`, `denomination`, `mint_year`, and `mint_mark` all match an existing row (nulls match nulls). This is a heuristic, not a hard constraint — a collector can legitimately own two of the same coin (e.g. different condition/grade), so a match is **flagged for a decision, not silently blocked or silently duplicated**.
 *   **Where it runs:** a new Edge Function endpoint, `check-duplicate`, queries `personal_coins` for rows matching the candidate fields and returns any matches (id, thumbnail signed URL, `image_quality_score`, existing notes/album placement) to the client.
-*   **One stored image per coin identity — user decides which:** duplicates do **not** each get their own stored photo by default. When a match is found, the app shows the new photo side-by-side with the existing stored one, along with an **image quality score** for each (§3.2 — Gemini also returns a 0–100 clarity/quality estimate alongside the extracted fields, shown as a hint, not a verdict — the user has final say, e.g. for old/rare coins where they may want to keep an existing photo for reasons the score can't capture, or vice versa). The user picks one of:
-    *   **Keep existing photo** — new photo is discarded, never uploaded to Storage.
-    *   **Replace with new photo** — old Storage object is deleted, new one uploaded, `image_quality_score` updated on the existing row.
+*   **Every specimen gets its own row — updated 2026-09-18.** A confirmed duplicate is a real owned specimen, not just a count: it inserts its own new `personal_coins` row (all identity/physical/assessment fields copied from the matched row) rather than incrementing a counter. There's no more `quantity` column — "how many of this coin do I own" is just how many rows share the identity.
+*   **One stored photo shared across a coin's rows — user decides whether to keep or replace it:** a new specimen's row doesn't need its own upload; it points at the same Storage object (`image_path`/`image_path_back`) as the matched row by default. When a match is found, the app shows the new photo side-by-side with the existing stored one, along with an **image quality score** for each (§3.2 — Gemini also returns a 0–100 clarity/quality estimate, shown as a hint, not a verdict — the user has final say, e.g. for old/rare coins where they may want to keep an existing photo for reasons the score can't capture, or vice versa). The user picks one of:
+    *   **Keep existing photo** — new photo is discarded, never uploaded to Storage; the new row just references the existing `image_path`.
+    *   **Replace with new photo** — old Storage object is deleted, new one uploaded, and *every* row currently sharing the old `image_path` (not just this one) is repointed to the new one, since it's a better picture of the same physical mintage.
     *   Nothing is written to Storage until the user makes this choice.
-*   **What gets recorded:** rather than inserting a second row, a confirmed duplicate **increments a `quantity` counter** on the existing matching row (§4.1) — it represents "I own N of this coin," not N separate photographed records. `personal_notes` from the duplicate capture (if any) can be appended to the existing row's notes.
+*   `personal_notes` on a new duplicate row is its own — not merged/appended into an existing row's notes, since it's now a distinct record.
 *   **User control:** the review form shows the warning banner and match details before committing anything; the user can also back out entirely (e.g. they mis-scanned, or it isn't actually the same coin — AI extraction can be wrong) rather than accepting the duplicate action.
 *   **No DB-level uniqueness constraint** is added on the match-key columns — matching is app-logic, not a DB constraint, since it's a heuristic.
 
 #### 3.6 Album Placement (Display Location)
 *   Purpose: once a coin is physically placed into a display album, record *where* — which album, page, and pocket — so the app can answer "where is coin X" and, later, "what's in album Y, page Z."
 *   This is a **separate step from capture/save** — a coin can exist in the collection (row in `personal_coins`) before it's been placed in an album, so placement fields are nullable and editable after the fact (e.g. from a future edit/detail view).
-*   **Duplicates are never placed in an album.** Only the single representative row per coin identity (§3.5) is eligible for album placement — extra owned specimens are tracked purely via `quantity`, since only one physical coin per identity goes on display. Placement fields (`album_id`/`page_number`/`pocket_number`) live on that one row and are untouched by duplicate increments.
+*   **Each specimen can be placed independently — updated 2026-09-18.** Since §3.5 now gives every duplicate its own row, the old restriction (only one representative row per identity could ever be placed) no longer applies structurally — there's simply nothing left blocking it. A collector owning three of the same coin can place each physical specimen in its own album pocket.
 *   **Deliberately kept dynamic, not fixed to a page/pocket count.** The user does not have the physical album specs on hand yet (needs to locate them), and different albums may not share the same layout (pockets-per-page can vary by album or even by page — e.g. a page of large coins vs. a page of small ones). So the schema captures placement as **free-form coordinates**, not a rigid grid tied to a predefined layout table:
     *   `album_id` — which album (FK to `albums`).
     *   `page_number` — plain sequential integer, works regardless of how a page is laid out.
@@ -115,9 +116,10 @@ CREATE TABLE personal_coins (
     mint_id BIGINT REFERENCES mints(id),  -- resolved from (country, mint_mark) at save time; null if no match on file yet
     image_path TEXT NOT NULL,   -- Storage object path, not a public URL
     image_quality_score INT2,  -- Gemini-estimated clarity 0-100, shown as a hint during duplicate review
-    quantity INT2 NOT NULL DEFAULT 1,  -- how many specimens owned matching this identity
+    -- No `quantity` column (removed 2026-09-18) -- each owned specimen is
+    -- its own row (see §3.5); rows can share an image_path.
     personal_notes TEXT,
-    album_id BIGINT REFERENCES albums(id),   -- nullable: set once physically placed; never set on duplicates beyond the first
+    album_id BIGINT REFERENCES albums(id),   -- nullable: set once physically placed; independently settable per specimen
     page_number INT2,                        -- nullable, pending album spec
     pocket_number INT2,                      -- nullable, pending album spec
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -183,12 +185,15 @@ if (matches.length === 0) {
     }).then(r => r.json());
 }
 
-// 4b. Match found -> show new photo + each match's photo/score side-by-side and
-//     let the user decide, per match, what to do. The score is a hint only;
-//     the user (not the app) makes the call, e.g. to protect a rare/old coin's
-//     existing photo even if it scores lower.
-//     User choice A: "Not a duplicate" -> falls through to 4a as a new record.
-//     User choice B: "Duplicate — keep existing photo" ->
+// 4b. Match(es) found -> show the new photo next to the best-quality existing
+//     one (picked client-side when there's more than one owned specimen) and
+//     let the user decide. The score is a hint only; the user (not the app)
+//     makes the call, e.g. to protect a rare/old coin's existing photo even
+//     if it scores lower. Confirming inserts its own new row either way
+//     (§3.5) — it's still a real, separately owned specimen.
+//     User choice A: "Not a duplicate" -> falls through to 4a as a new record
+//     with its own fresh photo, not linked to the matched identity at all.
+//     User choice B: "Same coin — keep existing photo" ->
     await fetch('/functions/v1/save-duplicate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -196,7 +201,7 @@ if (matches.length === 0) {
     });
     // new_quality_score / compressedBlob are discarded client-side, never uploaded.
 
-//     User choice C: "Duplicate — replace with new photo" ->
+//     User choice C: "Same coin — replace shared photo" ->
     await fetch('/functions/v1/save-duplicate', {
         method: 'POST',
         body: buildMultipart({ matchedId: matches[0].id, replaceImage: true, personal_notes, image: compressedBlob, new_quality_score }),
@@ -292,7 +297,7 @@ Deno.serve(async (req) => {
 });
 ```
 
-#### 5.5 Edge Function: `save-duplicate`
+#### 5.5 Edge Function: `save-duplicate` — updated 2026-09-18
 
 ```javascript
 // Runs server-side; holds SUPABASE_SERVICE_ROLE_KEY as a secret env var.
@@ -301,22 +306,20 @@ const supabase = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_SERVICE_ROLE_
 Deno.serve(async (req) => {
     const { matchedId, replaceImage, personal_notes, image, new_quality_score } = await parseMultipart(req);
 
-    const { data: existing, error: fetchError } = await supabase
+    // Identity/physical/assessment fields to copy onto the new row — same
+    // coin, so the same specs, just a different owned specimen.
+    const { data: matched, error: fetchError } = await supabase
         .from('personal_coins')
-        .select('id, image_path, quantity, personal_notes')
+        .select('country, denomination, mint_year, mint_mark, mint_id, image_path, image_path_back, image_quality_score, /* ...physical/assessment fields */')
         .eq('id', matchedId)
         .single();
     if (fetchError) return Response.json({ error: fetchError.message }, { status: 500 });
 
-    const updates = {
-        quantity: existing.quantity + 1,
-        personal_notes: personal_notes
-            ? [existing.personal_notes, personal_notes].filter(Boolean).join('\n')
-            : existing.personal_notes,
-    };
+    let { image_path, image_path_back, image_quality_score } = matched;
 
     // Only touch Storage if the user explicitly chose to replace the photo.
-    // "Keep existing" never uploads the new image at all.
+    // "Keep existing" never uploads the new image — the new row just
+    // references the same image_path the matched row already has.
     if (replaceImage) {
         const newImagePath = `coin_${Date.now()}_${crypto.randomUUID()}.jpg`;
         const { error: uploadError } = await supabase.storage
@@ -324,20 +327,26 @@ Deno.serve(async (req) => {
             .upload(newImagePath, image, { contentType: 'image/jpeg' });
         if (uploadError) return Response.json({ error: uploadError.message }, { status: 500 });
 
-        await supabase.storage.from('coin-photos').remove([existing.image_path]);
-        updates.image_path = newImagePath;
-        updates.image_quality_score = new_quality_score;
+        // Repoint every row currently sharing the old photo, not just this
+        // pair — it's a better picture of the same physical mintage.
+        await supabase.from('personal_coins')
+            .update({ image_path: newImagePath, image_quality_score: new_quality_score })
+            .eq('image_path', matched.image_path);
+        await supabase.storage.from('coin-photos').remove([matched.image_path]);
+        image_path = newImagePath;
+        image_quality_score = new_quality_score;
     }
 
-    // Note: album_id / page_number / pocket_number are intentionally NOT
-    // touched here — duplicates never get their own album placement (§3.6).
-    const { error: updateError } = await supabase
+    // album_id / page_number / pocket_number are intentionally left unset —
+    // a new specimen starts unplaced, same as any freshly-saved coin (§3.6).
+    const { data, error: insertError } = await supabase
         .from('personal_coins')
-        .update(updates)
-        .eq('id', matchedId);
-    if (updateError) return Response.json({ error: updateError.message }, { status: 500 });
+        .insert([{ ...matched, image_path, image_path_back, image_quality_score, personal_notes }])
+        .select('id')
+        .single();
+    if (insertError) return Response.json({ error: insertError.message }, { status: 500 });
 
-    return Response.json({ id: matchedId, quantity: updates.quantity });
+    return Response.json({ id: data.id });
 });
 ```
 

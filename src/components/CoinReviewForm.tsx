@@ -116,6 +116,14 @@ export function CoinReviewForm({
     }
   }
 
+  // Every match shares the same identity by construction (that's the match
+  // key) — pick the best-quality photo among them as the one shown/reused,
+  // rather than showing one card per owned specimen.
+  const representativeMatch = matches.reduce<DuplicateMatch | null>((best, m) => {
+    if (!best) return m
+    return (m.image_quality_score ?? -1) > (best.image_quality_score ?? -1) ? m : best
+  }, null)
+
   async function handleConfirmDuplicate(matchId: number, replaceImage: boolean) {
     setSaving(true)
     setError(null)
@@ -243,27 +251,31 @@ export function CoinReviewForm({
       {matches.length > 0 && (
         <div className="duplicate-banner">
           <p>
-            <strong>Possible duplicate{matches.length > 1 ? 's' : ''} found.</strong> Is this the same coin you already own?
+            <strong>
+              You already own {matches.length} of this coin.
+            </strong>{' '}
+            Is this another specimen of the same coin? It'll get its own entry, sharing this photo unless you replace
+            it below.
           </p>
-          {matches.map((m) => (
-            <div className="duplicate-match" key={m.id}>
-              {m.thumbnail_url && <img src={m.thumbnail_url} alt="Existing coin" />}
+          {representativeMatch && (
+            <div className="duplicate-match">
+              {representativeMatch.thumbnail_url && <img src={representativeMatch.thumbnail_url} alt="Existing coin" />}
               <div className="duplicate-match-info">
                 <p>
-                  Owned: {m.quantity} · Existing quality: {m.image_quality_score ?? '—'} · New quality: {qualityScore ?? '—'}
+                  Existing quality: {representativeMatch.image_quality_score ?? '—'} · New quality: {qualityScore ?? '—'}
                 </p>
-                {m.personal_notes && <p className="page-hint">{m.personal_notes}</p>}
+                {representativeMatch.personal_notes && <p className="page-hint">{representativeMatch.personal_notes}</p>}
                 <div className="duplicate-actions">
-                  <button type="button" onClick={() => handleConfirmDuplicate(m.id, false)} disabled={saving}>
-                    Duplicate — keep existing photos
+                  <button type="button" onClick={() => handleConfirmDuplicate(representativeMatch.id, false)} disabled={saving}>
+                    Same coin — keep existing photo
                   </button>
-                  <button type="button" onClick={() => handleConfirmDuplicate(m.id, true)} disabled={saving}>
-                    Duplicate — replace photos
+                  <button type="button" onClick={() => handleConfirmDuplicate(representativeMatch.id, true)} disabled={saving}>
+                    Same coin — replace shared photo
                   </button>
                 </div>
               </div>
             </div>
-          ))}
+          )}
           <button type="button" onClick={handleSaveNew} disabled={saving}>
             Not a duplicate — save as new
           </button>

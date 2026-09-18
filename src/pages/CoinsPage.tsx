@@ -182,7 +182,6 @@ export function CoinsPage() {
                 <p className="page-hint coin-card-meta">
                   {c.mint_mark && `Mark: ${c.mint_mark}${c.mints ? ` — ${c.mints.mint_name}` : ''}`}
                   {c.commemorative_theme && (c.mint_mark ? ' · ' : '') + `Commemorative: ${c.commemorative_theme}`}
-                  {c.quantity > 1 && (c.mint_mark || c.commemorative_theme ? ' · ' : '') + `Owned: ${c.quantity}`}
                 </p>
                 <p className="page-hint coin-card-meta">
                   {c.albums ? `In album: ${c.albums.name}` : 'Not placed in an album'}

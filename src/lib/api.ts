@@ -135,7 +135,6 @@ export type DuplicateMatch = {
   image_path: string
   image_quality_score: number | null
   personal_notes: string | null
-  quantity: number
   album_id: number | null
   page_number: number | null
   pocket_number: number | null
@@ -144,7 +143,6 @@ export type DuplicateMatch = {
 
 export type Coin = CoinFields & {
   id: number
-  quantity: number
   personal_notes: string | null
   image_quality_score: number | null
   album_id: number | null
@@ -245,6 +243,6 @@ export const coinApi = {
       form.set('image_back', back, `back.${ext}`)
       if (new_quality_score != null) form.set('new_quality_score', String(new_quality_score))
     }
-    return postRaw<{ id: number; quantity: number }>('save-duplicate', form)
+    return postRaw<{ id: number }>('save-duplicate', form)
   },
 }

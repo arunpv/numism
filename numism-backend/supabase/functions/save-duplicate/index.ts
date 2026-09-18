@@ -1,9 +1,18 @@
-// See coin_app_requirements.md §3.5, §5.5. Confirms a duplicate against an
-// existing row: increments quantity, and only touches Storage if the user
-// explicitly chose to replace the photo (replaceImage=true). Never sets
-// album_id/page_number/pocket_number — duplicates are never placed (§3.6).
+// See coin_app_requirements.md §3.5, §5.5. Confirms a duplicate by inserting
+// its own new row — a duplicate is a real owned specimen, not just a count —
+// sharing the matched row's photo (same image_path/image_path_back) rather
+// than uploading a fresh one, unless the user explicitly chose to replace
+// it. A replacement becomes the shared photo for every row of this
+// identity, not just the two involved here, since they're all pictures of
+// physically-identical specimens.
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
+
+const COPIED_IDENTITY_FIELDS =
+  "country, denomination, mint_year, mint_mark, mint_mark_position, mint_id, commemorative_theme, " +
+  "image_path, image_path_back, image_quality_score, period, value, currency, composition, weight_grams, " +
+  "diameter_mm, thickness_mm, shape, orientation, demonetized, rarity, estimated_value_low, " +
+  "estimated_value_high, grade";
 
 export default {
   fetch: withSupabase({ auth: ["publishable"] }, async (req, ctx) => {
@@ -20,19 +29,16 @@ export default {
       return Response.json({ error: "image and image_back are required when replaceImage=true" }, { status: 400 });
     }
 
-    const { data: existing, error: fetchError } = await ctx.supabaseAdmin
+    const { data: matched, error: fetchError } = await ctx.supabaseAdmin
       .from("personal_coins")
-      .select("id, image_path, image_path_back, quantity, personal_notes")
+      .select(COPIED_IDENTITY_FIELDS)
       .eq("id", matchedId)
       .single();
     if (fetchError) return Response.json({ error: fetchError.message }, { status: 500 });
 
-    const updates: Record<string, unknown> = {
-      quantity: existing.quantity + 1,
-      personal_notes: personal_notes
-        ? [existing.personal_notes, personal_notes].filter(Boolean).join("\n")
-        : existing.personal_notes,
-    };
+    let image_path = matched.image_path;
+    let image_path_back = matched.image_path_back;
+    let image_quality_score = matched.image_quality_score;
 
     if (replaceImage && image && imageBack) {
       const frontExt = (image.type || "image/jpeg").includes("png") ? "png" : "jpg";
@@ -49,19 +55,59 @@ export default {
         .upload(newImagePathBack, imageBack, { contentType: imageBack.type || "image/jpeg" });
       if (uploadBackError) return Response.json({ error: uploadBackError.message }, { status: 500 });
 
-      const oldPaths = [existing.image_path, existing.image_path_back].filter(Boolean) as string[];
+      // Repoint every other row sharing the old photo to the new one — it's
+      // a better picture of the same physical mintage, not just this pair's.
+      const oldImagePath = matched.image_path;
+      const oldImagePathBack = matched.image_path_back;
+      const { error: repointError } = await ctx.supabaseAdmin
+        .from("personal_coins")
+        .update({ image_path: newImagePath, image_path_back: newImagePathBack, image_quality_score: new_quality_score })
+        .eq("image_path", oldImagePath);
+      if (repointError) return Response.json({ error: repointError.message }, { status: 500 });
+
+      const oldPaths = [oldImagePath, oldImagePathBack].filter(Boolean) as string[];
       await ctx.supabaseAdmin.storage.from("coin-photos").remove(oldPaths);
-      updates.image_path = newImagePath;
-      updates.image_path_back = newImagePathBack;
-      updates.image_quality_score = new_quality_score;
+
+      image_path = newImagePath;
+      image_path_back = newImagePathBack;
+      image_quality_score = new_quality_score;
     }
 
-    const { error: updateError } = await ctx.supabaseAdmin
+    const { data, error: insertError } = await ctx.supabaseAdmin
       .from("personal_coins")
-      .update(updates)
-      .eq("id", matchedId);
-    if (updateError) return Response.json({ error: updateError.message }, { status: 500 });
+      .insert([
+        {
+          country: matched.country,
+          denomination: matched.denomination,
+          mint_year: matched.mint_year,
+          mint_mark: matched.mint_mark,
+          mint_mark_position: matched.mint_mark_position,
+          mint_id: matched.mint_id,
+          commemorative_theme: matched.commemorative_theme,
+          image_path,
+          image_path_back,
+          image_quality_score,
+          personal_notes,
+          period: matched.period,
+          value: matched.value,
+          currency: matched.currency,
+          composition: matched.composition,
+          weight_grams: matched.weight_grams,
+          diameter_mm: matched.diameter_mm,
+          thickness_mm: matched.thickness_mm,
+          shape: matched.shape,
+          orientation: matched.orientation,
+          demonetized: matched.demonetized,
+          rarity: matched.rarity,
+          estimated_value_low: matched.estimated_value_low,
+          estimated_value_high: matched.estimated_value_high,
+          grade: matched.grade,
+        },
+      ])
+      .select("id")
+      .single();
+    if (insertError) return Response.json({ error: insertError.message }, { status: 500 });
 
-    return Response.json({ id: matchedId, quantity: updates.quantity });
+    return Response.json({ id: data.id });
   }),
 };

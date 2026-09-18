@@ -1,6 +1,7 @@
 // See coin_app_requirements.md §3.6, §6 — edits identity fields, notes, and
-// album placement on an existing row. Does not touch photos/quantity; those
-// are only ever changed via save-duplicate's replace-photo path.
+// album placement on an existing row. Does not touch photos; those are only
+// ever changed via save-duplicate's replace-photo path (which also repoints
+// every other row sharing the same photo, per §3.5).
 //
 // Album placement is validated against the album's layout (num_pages/
 // pockets_per_page, uniform across the album) and against other coins
