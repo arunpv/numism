@@ -103,6 +103,19 @@ export const batchQueue = {
   },
 
   remove: (id: number): Promise<void> => withStore('readwrite', (store) => store.delete(id)) as Promise<void>,
+
+  // A `processing` item with no run actually working on it is stuck forever
+  // otherwise — neither the sync handler nor the manual trigger ever looks
+  // at anything but `pending`. This happens in practice: Background Sync
+  // doesn't guarantee a service worker gets to finish a long loop over many
+  // items before the browser/OS kills it, so a run interrupted mid-item
+  // orphans whatever was `processing` at that moment. Called at the start of
+  // every processing run (both entry points) so an interrupted run's
+  // leftovers always get picked up by the next one.
+  reclaimStuckProcessing: async (): Promise<void> => {
+    const stuck = await batchQueue.listByStatus('processing')
+    await Promise.all(stuck.map((item) => batchQueue.setStatus(item.id, 'pending')))
+  },
 }
 
 export function registerBatchSync(): void {

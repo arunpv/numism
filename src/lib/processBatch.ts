@@ -11,6 +11,7 @@ import { coinApi } from './api'
 import { batchQueue } from './batchQueue'
 
 export async function processQueueNow(onItemDone?: () => void): Promise<void> {
+  await batchQueue.reclaimStuckProcessing()
   const pending = await batchQueue.listByStatus('pending')
   for (const item of pending) {
     await batchQueue.setStatus(item.id, 'processing')

@@ -68,6 +68,10 @@ async function readyToProcess(): Promise<boolean> {
 async function processBatch() {
   if (!(await readyToProcess())) throw new Error('conditions not met (need WiFi + screen off)')
 
+  // A prior sync invocation can be killed by the browser/OS mid-loop before
+  // finishing every pending item — reclaim whatever it left stuck in
+  // `processing` so this run (or a later one) actually gets to it.
+  await batchQueue.reclaimStuckProcessing()
   const pending = await batchQueue.listByStatus('pending')
   for (const item of pending) {
     await batchQueue.setStatus(item.id, 'processing')
