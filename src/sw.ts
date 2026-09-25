@@ -34,16 +34,37 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string
 const FUNCTIONS_URL = `${SUPABASE_URL}/functions/v1`
 
+// Same rationale as src/lib/api.ts's FUNCTION_TIMEOUT_MS/fetchWithTimeout
+// (duplicated rather than imported — see the file-header note on why this
+// module can't pull in src/lib/api.ts): a bare fetch with no timeout can
+// hang forever on a stalled connection instead of erroring, which is
+// especially likely for Batch mode's WiFi-with-screen-off condition this
+// file runs under. Kept in sync manually with api.ts's budget.
+const FUNCTION_TIMEOUT_MS = 150_000
+
 async function extractCoin(front: Blob, back: Blob) {
   const form = new FormData()
   const ext = front.type.includes('png') ? 'png' : 'jpg'
   form.set('front', front, `front.${ext}`)
   form.set('back', back, `back.${ext}`)
-  const res = await fetch(`${FUNCTIONS_URL}/extract-coin`, {
-    method: 'POST',
-    headers: { apiKey: SUPABASE_PUBLISHABLE_KEY },
-    body: form,
-  })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), FUNCTION_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(`${FUNCTIONS_URL}/extract-coin`, {
+      method: 'POST',
+      headers: { apiKey: SUPABASE_PUBLISHABLE_KEY },
+      body: form,
+      signal: controller.signal,
+    })
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new Error(`Request timed out after ${FUNCTION_TIMEOUT_MS / 1000}s`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
   const json = await res.json()
   if (!res.ok) throw new Error(json.error ?? `extract-coin failed (${res.status})`)
   return json as {

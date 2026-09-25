@@ -89,6 +89,31 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+// Gemini's flash endpoint routinely returns 429 (per-minute quota) and 503
+// (transient model overload) under normal load — both are worth a bounded
+// retry rather than failing the whole capture outright. Everything else
+// (400 bad request, 401/403 auth, etc.) is not retried since retrying won't
+// change the outcome. 3 attempts total, honoring a numeric `Retry-After`
+// header on 429 when present, otherwise exponential backoff (1s, 3s).
+const MAX_ATTEMPTS = 3;
+const RETRYABLE_STATUSES = new Set([429, 503]);
+const BACKOFF_MS = [1000, 3000];
+
+// No per-request timeout meant a stalled connection (as opposed to an
+// explicit error response) could hang this function indefinitely — the
+// caller never got either a result or a thrown error. 20s comfortably
+// covers a normal Gemini response; anything longer is treated as failed so
+// it can be retried/reported instead of hanging. Kept short (rather than,
+// say, 45s) because extract-coin/index.ts can call this twice sequentially
+// (identify, then a constrained mint-mark re-check) — at MAX_ATTEMPTS=3
+// each, the worst case is already ~2 * (3*20s + 4s backoff) = ~128s, close
+// to Supabase Edge Functions' wall-clock limit.
+const REQUEST_TIMEOUT_MS = 20_000;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function callGeminiRaw(
   apiKey: string,
   images: CoinImage[],
@@ -100,33 +125,63 @@ async function callGeminiRaw(
     inline_data: { mime_type: img.mimeType, data: arrayBufferToBase64(img.bytes) },
   }));
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: prompt }, ...imageParts],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema,
-        },
-      }),
+  const body = JSON.stringify({
+    contents: [
+      {
+        parts: [{ text: prompt }, ...imageParts],
+      },
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema,
     },
-  );
+  });
 
-  if (!res.ok) {
-    throw new Error(`Gemini request failed: ${res.status} ${await res.text()}`);
+  let lastError: Error = new Error("Gemini request failed: unknown error");
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+          signal: controller.signal,
+        },
+      );
+    } catch (err) {
+      lastError = (err as Error).name === "AbortError"
+        ? new Error(`Gemini request timed out after ${REQUEST_TIMEOUT_MS}ms`)
+        : (err as Error);
+      if (attempt < MAX_ATTEMPTS) {
+        await sleep(BACKOFF_MS[attempt - 1]);
+        continue;
+      }
+      throw lastError;
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!res.ok) {
+      const statusText = await res.text();
+      lastError = new Error(`Gemini request failed: ${res.status} ${statusText}`);
+      if (RETRYABLE_STATUSES.has(res.status) && attempt < MAX_ATTEMPTS) {
+        const retryAfter = Number(res.headers.get("retry-after"));
+        await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : BACKOFF_MS[attempt - 1]);
+        continue;
+      }
+      throw lastError;
+    }
+
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("Gemini returned no content");
+    return JSON.parse(text);
   }
-
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Gemini returned no content");
-  return JSON.parse(text);
+  throw lastError;
 }
 
 // First pass: free-text extraction, mint_mark is a best-effort guess.

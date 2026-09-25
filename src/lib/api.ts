@@ -1,7 +1,31 @@
 import { functionUrl, FUNCTION_HEADERS } from './supabase'
 
+// Plain fetch() with no timeout meant a stalled connection (as opposed to an
+// explicit error response) could hang forever — the caller's promise never
+// resolved or rejected, so a page could sit on a "Identifying coin…"-style
+// loading state indefinitely with no error to show. 150s is set above
+// extract-coin's own worst-case retry budget (see coin-schema.ts) so a
+// legitimately-in-progress backend retry isn't cut off early; anything
+// longer than that is treated as failed rather than hung.
+const FUNCTION_TIMEOUT_MS = 150_000
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), FUNCTION_TIMEOUT_MS)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new Error(`Request timed out after ${FUNCTION_TIMEOUT_MS / 1000}s`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 async function callFunction<T>(name: string, body: unknown): Promise<T> {
-  const res = await fetch(functionUrl(name), {
+  const res = await fetchWithTimeout(functionUrl(name), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...FUNCTION_HEADERS },
     body: JSON.stringify(body),
@@ -12,7 +36,7 @@ async function callFunction<T>(name: string, body: unknown): Promise<T> {
 }
 
 async function postRaw<T>(name: string, body: BodyInit, extraHeaders: Record<string, string> = {}): Promise<T> {
-  const res = await fetch(functionUrl(name), {
+  const res = await fetchWithTimeout(functionUrl(name), {
     method: 'POST',
     headers: { ...FUNCTION_HEADERS, ...extraHeaders },
     body,
