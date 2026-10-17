@@ -23,6 +23,7 @@ A personal-use web application (installable as a PWA on mobile) to capture image
 #### 3.2 AI Identification Engine
 *   Client sends the compressed image (base64 or multipart) to the Supabase Edge Function endpoint — never directly to Gemini.
 *   Edge Function calls Gemini 3.6 Flash with `responseMimeType: "application/json"` and a `responseSchema` enforcing the structure below, so malformed output is rejected at the API level rather than parsed hopefully.
+*   **Consistent naming — added 2026-10-17.** Free-text `country`/`denomination` drifted between runs for the same coin ("United States" vs "United States of America"; dimes saved as "One Dime", "Dime", "1 Dime", "10 Cents", "10 Cents (Dime)"), which silently breaks duplicate detection (§3.5, exact match) and mint resolution (§3.7). The extraction prompt now states naming rules (country = common short English name; denomination = the wording printed on the coin in Title Case, e.g. "ONE DIME" → "One Dime"; English if multilingual; a currency symbol is spelled out, "₹5" → "5 Rupees"; the type's usual wording only if none is printed/legible) and lists the country/denomination spellings already present in `personal_coins` plus the countries in `mint_mark_rules`, telling Gemini to reuse an existing spelling when the coin matches. The list is built per request, so it grows with the collection without a fixed enum.
 *   **Target JSON Response Structure:**
     ```json
     {

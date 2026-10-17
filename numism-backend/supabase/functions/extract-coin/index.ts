@@ -4,7 +4,7 @@
 // fields, since mint marks/dates/commemorative details can be on either side.
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
-import { callGemini, callGeminiMintMatch, type CoinImage } from "../_shared/coin-schema.ts";
+import { callGemini, callGeminiMintMatch, type CoinImage, type KnownNames } from "../_shared/coin-schema.ts";
 import { resolveMint } from "../_shared/resolve-mint.ts";
 
 export default {
@@ -22,7 +22,21 @@ export default {
     if (!apiKey) return Response.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 });
 
     try {
-      const { image_quality_score, ...fields } = await callGemini(apiKey, front, back);
+      const [{ data: coinRows, error: coinsError }, { data: ruleCountryRows, error: rulesError }] = await Promise.all([
+        ctx.supabaseAdmin.from("personal_coins").select("country, denomination"),
+        ctx.supabaseAdmin.from("mint_mark_rules").select("country"),
+      ]);
+      if (coinsError || rulesError) {
+        return Response.json({ error: (coinsError ?? rulesError)!.message }, { status: 500 });
+      }
+      const known: KnownNames = {};
+      for (const r of ruleCountryRows ?? []) known[r.country] ??= [];
+      for (const r of coinRows ?? []) {
+        const denoms = (known[r.country] ??= []);
+        if (!denoms.includes(r.denomination)) denoms.push(r.denomination);
+      }
+
+      const { image_quality_score, ...fields } = await callGemini(apiKey, front, back, known);
 
       // §3.7: if we already have known mint marks on file for this country,
       // re-examine the image constrained to that set instead of trusting

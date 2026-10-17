@@ -45,8 +45,16 @@ export const ASSESSMENT_SCHEMA = {
 export const COIN_SCHEMA = {
   type: "object",
   properties: {
-    country: { type: "string" },
-    denomination: { type: "string" },
+    country: {
+      type: "string",
+      description: "Common short English name of the issuing country, e.g. 'United States', 'India', 'United Kingdom'.",
+    },
+    denomination: {
+      type: "string",
+      description:
+        "Denomination exactly as worded on the coin, in Title Case, e.g. 'One Dime', 'Five Cents', 'Quarter " +
+        "Dollar', '5 Rupees'.",
+    },
     mint_year: { type: "integer", nullable: true },
     mint_mark: { type: "string", nullable: true },
     commemorative_theme: {
@@ -184,11 +192,28 @@ async function callGeminiRaw(
   throw lastError;
 }
 
+// Spellings already used in the collection, keyed by country, so repeat
+// captures reuse them instead of drifting ('United States' vs 'United States
+// of America', 'One Dime' vs '10 Cents') — exact matches matter for duplicate
+// detection and mint resolution.
+export type KnownNames = Record<string, string[]>;
+
+function knownNamesPrompt(known: KnownNames): string {
+  const lines = Object.entries(known)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([country, denoms]) => (denoms.length > 0 ? `${country}: ${denoms.join(", ")}` : country));
+  if (lines.length === 0) return "";
+  return (
+    " Countries and denominations already in this collection — if the coin is one of these, use exactly " +
+    "this spelling:\n" + lines.join("\n")
+  );
+}
+
 // First pass: free-text extraction, mint_mark is a best-effort guess.
 // Takes both the front (obverse) and back (reverse) photos — mint marks,
 // commemorative themes, and dates can appear on either side depending on
 // the country/coin, so both are always sent together.
-export async function callGemini(apiKey: string, front: CoinImage, back: CoinImage) {
+export async function callGemini(apiKey: string, front: CoinImage, back: CoinImage, known: KnownNames = {}) {
   return callGeminiRaw(
     apiKey,
     [front, back],
@@ -199,7 +224,15 @@ export async function callGemini(apiKey: string, front: CoinImage, back: CoinIma
       "period, face value, currency unit, metal composition, weight/diameter/thickness, shape, die " +
       "orientation, whether it's demonetized, and an assessment of its rarity, condition grade, and " +
       "estimated market value range — base physical estimates on known specs for this coin type where the " +
-      "photos alone aren't conclusive.",
+      "photos alone aren't conclusive." +
+      " Naming rules, so the same coin always gets the same values: country is the common short English " +
+      "name of the issuing country (e.g. 'United States', not 'USA' or 'United States of America'). " +
+      "Denomination is the wording printed on the coin, transcribed in Title Case, keeping words and numerals " +
+      "as printed (e.g. 'ONE DIME' → 'One Dime', 'FIVE CENTS' → 'Five Cents', 'QUARTER DOLLAR' → 'Quarter " +
+      "Dollar', '5 RUPEES' → '5 Rupees'). If it's printed in several languages, use the English wording. If " +
+      "only a currency symbol is printed, spell out the unit (e.g. '₹5' → '5 Rupees'). Only if no " +
+      "denomination is printed or it isn't legible, use the wording the coin type normally carries." +
+      knownNamesPrompt(known),
     COIN_SCHEMA,
   );
 }
@@ -247,7 +280,7 @@ export async function callGeminiMintMatch(
       mint_mark: {
         type: "string",
         nullable: true,
-        enum: [...knownMarks, null],
+        enum: knownMarks,
         description: "Must be exactly one of the known marks, or null if none match / not legible.",
       },
       mint_mark_position: {
