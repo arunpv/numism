@@ -417,6 +417,18 @@
     background: none;
     border-color: var(--border);
   }
+
+  .danger {
+    margin-left: auto;
+    color: #b91c1c;
+    background: none;
+    border-color: #fca5a5;
+
+    @media (prefers-color-scheme: dark) {
+      color: #fca5a5;
+      border-color: #7f1d1d;
+    }
+  }
 }
 
 .duplicate-banner {

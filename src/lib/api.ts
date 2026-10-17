@@ -195,6 +195,8 @@ export const coinApi = {
   updateCoin: (id: number, fields: CoinEditFields) =>
     callFunction<{ data: CoinDetail }>('update-coin', { id, ...fields }),
 
+  deleteCoin: (id: number) => callFunction<{ ok: true }>('delete-coin', { id }),
+
   extractCoin: (front: Blob, back: Blob) => {
     const form = new FormData()
     const ext = front.type.includes('png') ? 'png' : 'jpg'

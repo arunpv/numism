@@ -14,6 +14,7 @@ export function CoinDetailPage({ coinId, onBack }: Props) {
   const [fields, setFields] = useState<CoinEditFields | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
@@ -103,6 +104,19 @@ export function CoinDetailPage({ coinId, onBack }: Props) {
       setError((e as Error).message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(`Delete coin #${coinId}? This can't be undone.`)) return
+    setDeleting(true)
+    setError(null)
+    try {
+      await coinApi.deleteCoin(coinId)
+      onBack()
+    } catch (e) {
+      setError((e as Error).message)
+      setDeleting(false)
     }
   }
 
@@ -243,8 +257,15 @@ export function CoinDetailPage({ coinId, onBack }: Props) {
         )}
 
         <div className="capture-actions">
-          <button type="button" onClick={handleSave} disabled={saving || !fields.country || !fields.denomination}>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || deleting || !fields.country || !fields.denomination}
+          >
             {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button type="button" className="danger" onClick={handleDelete} disabled={saving || deleting}>
+            {deleting ? 'Deleting…' : 'Delete coin'}
           </button>
         </div>
       </div>
