@@ -9,6 +9,7 @@
 // the service worker's global scope (no localStorage there).
 import { coinApi } from './api'
 import { batchQueue } from './batchQueue'
+import { ApiError } from './apiError'
 
 export async function processQueueNow(onItemDone?: () => void): Promise<void> {
   await batchQueue.reclaimStuckProcessing()
@@ -27,6 +28,12 @@ export async function processQueueNow(onItemDone?: () => void): Promise<void> {
       })
     } catch (err) {
       await batchQueue.setError(item.id, (err as Error).message)
+      // Rate limited: every remaining item would fail the same way, so
+      // leave them pending for a later run instead of erroring them all.
+      if (err instanceof ApiError && err.isRateLimit) {
+        onItemDone?.()
+        break
+      }
     }
     onItemDone?.()
   }

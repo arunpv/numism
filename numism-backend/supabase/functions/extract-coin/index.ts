@@ -4,7 +4,7 @@
 // fields, since mint marks/dates/commemorative details can be on either side.
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
-import { callGemini, callGeminiMintMatch, type CoinImage, type KnownNames } from "../_shared/coin-schema.ts";
+import { callGemini, callGeminiMintMatch, GeminiError, type CoinImage, type KnownNames } from "../_shared/coin-schema.ts";
 import { resolveMint } from "../_shared/resolve-mint.ts";
 
 export default {
@@ -85,6 +85,9 @@ export default {
         mark_image_url,
       });
     } catch (err) {
+      if (err instanceof GeminiError) {
+        return Response.json({ error: err.message, retry_at: err.retryAt }, { status: err.status });
+      }
       return Response.json({ error: (err as Error).message }, { status: 502 });
     }
   }),

@@ -1,4 +1,5 @@
 import { functionUrl, FUNCTION_HEADERS } from './supabase'
+import { ApiError } from './apiError'
 
 // Plain fetch() with no timeout meant a stalled connection (as opposed to an
 // explicit error response) could hang forever — the caller's promise never
@@ -31,7 +32,7 @@ async function callFunction<T>(name: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   })
   const json = await res.json()
-  if (!res.ok) throw new Error(json.error ?? `${name} failed (${res.status})`)
+  if (!res.ok) throw new ApiError(json.error ?? `${name} failed (${res.status})`, res.status, json.retry_at ?? null)
   return json
 }
 
@@ -42,7 +43,7 @@ async function postRaw<T>(name: string, body: BodyInit, extraHeaders: Record<str
     body,
   })
   const json = await res.json()
-  if (!res.ok) throw new Error(json.error ?? `${name} failed (${res.status})`)
+  if (!res.ok) throw new ApiError(json.error ?? `${name} failed (${res.status})`, res.status, json.retry_at ?? null)
   return json
 }
 

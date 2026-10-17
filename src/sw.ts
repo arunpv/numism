@@ -11,6 +11,7 @@
 import { clientsClaim } from 'workbox-core'
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 import { batchQueue } from './lib/batchQueue'
+import { ApiError } from './lib/apiError'
 
 declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<{ url: string; revision: string | null }> }
 
@@ -66,7 +67,7 @@ async function extractCoin(front: Blob, back: Blob) {
     clearTimeout(timeout)
   }
   const json = await res.json()
-  if (!res.ok) throw new Error(json.error ?? `extract-coin failed (${res.status})`)
+  if (!res.ok) throw new ApiError(json.error ?? `extract-coin failed (${res.status})`, res.status, json.retry_at ?? null)
   return json as {
     fields: import('./lib/api').CoinFields
     image_quality_score: number | null
@@ -107,6 +108,9 @@ async function processBatch() {
       })
     } catch (err) {
       await batchQueue.setError(item.id, (err as Error).message)
+      // Rate limited: every remaining item would fail the same way, so
+      // leave them pending for a later run instead of erroring them all.
+      if (err instanceof ApiError && err.isRateLimit) break
     }
   }
 }

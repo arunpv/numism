@@ -101,11 +101,13 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 // (transient model overload) under normal load — both are worth a bounded
 // retry rather than failing the whole capture outright. Everything else
 // (400 bad request, 401/403 auth, etc.) is not retried since retrying won't
-// change the outcome. 3 attempts total, honoring a numeric `Retry-After`
-// header on 429 when present, otherwise exponential backoff (1s, 3s).
+// change the outcome. 3 attempts total: 503s back off 1s/3s; 429s wait out
+// the RetryInfo delay from the error body, but only when it's short — a
+// 30s+ per-minute wait or a daily quota would just burn the attempts and
+// the wall-clock budget, so those fail straight away with a retry time.
 const MAX_ATTEMPTS = 3;
-const RETRYABLE_STATUSES = new Set([429, 503]);
 const BACKOFF_MS = [1000, 3000];
+const MAX_RATE_LIMIT_WAIT_MS = 15_000;
 
 // No per-request timeout meant a stalled connection (as opposed to an
 // explicit error response) could hang this function indefinitely — the
@@ -120,6 +122,59 @@ const REQUEST_TIMEOUT_MS = 20_000;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Gemini's raw error bodies are long JSON blobs — surfaced verbatim they
+// swamp the Queue tab. This boils them down to one line, plus when to retry
+// for rate limits (retryAt, ISO) so the client can show it in local time.
+export class GeminiError extends Error {
+  constructor(message: string, public status: number, public retryAt: string | null = null) {
+    super(message);
+  }
+}
+
+// Daily Gemini quotas reset at midnight Pacific time.
+function nextPacificMidnight(): Date {
+  const now = new Date();
+  const pacific = new Date(now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
+  const offsetMs = now.getTime() - pacific.getTime();
+  const midnight = new Date(pacific);
+  midnight.setHours(24, 0, 0, 0);
+  return new Date(Math.round((midnight.getTime() + offsetMs) / 60_000) * 60_000);
+}
+
+async function geminiError(res: Response): Promise<GeminiError> {
+  // deno-lint-ignore no-explicit-any
+  let err: any = null;
+  try {
+    err = (await res.json()).error;
+  } catch {
+    // non-JSON body — fall through to the generic message
+  }
+  // deno-lint-ignore no-explicit-any
+  const details: any[] = err?.details ?? [];
+
+  if (res.status === 429) {
+    const violation = details.find((d) => d["@type"]?.endsWith("QuotaFailure"))?.violations?.[0];
+    const retryDelay = details.find((d) => d["@type"]?.endsWith("RetryInfo"))?.retryDelay as string | undefined;
+    const daily = /PerDay/i.test(violation?.quotaId ?? "");
+    const limit = violation?.quotaValue ? ` (${violation.quotaValue}/${daily ? "day" : "min"})` : "";
+    const retryAt = retryDelay
+      ? new Date(Date.now() + Math.ceil(parseFloat(retryDelay)) * 1000)
+      : daily
+      ? nextPacificMidnight()
+      : new Date(Date.now() + 60_000);
+    return new GeminiError(
+      daily ? `Daily Gemini limit reached${limit}.` : `Gemini rate limit reached${limit}.`,
+      429,
+      retryAt.toISOString(),
+    );
+  }
+  if (res.status === 503) {
+    return new GeminiError("Gemini is overloaded right now — try again in a minute.", 503);
+  }
+  const detail = (err?.message as string | undefined)?.split("\n")[0].slice(0, 150);
+  return new GeminiError(`Gemini error ${res.status}${detail ? `: ${detail}` : ""}`, 502);
 }
 
 async function callGeminiRaw(
@@ -162,7 +217,7 @@ async function callGeminiRaw(
       );
     } catch (err) {
       lastError = (err as Error).name === "AbortError"
-        ? new Error(`Gemini request timed out after ${REQUEST_TIMEOUT_MS}ms`)
+        ? new GeminiError(`Gemini didn't respond within ${REQUEST_TIMEOUT_MS / 1000}s.`, 504)
         : (err as Error);
       if (attempt < MAX_ATTEMPTS) {
         await sleep(BACKOFF_MS[attempt - 1]);
@@ -174,14 +229,20 @@ async function callGeminiRaw(
     }
 
     if (!res.ok) {
-      const statusText = await res.text();
-      lastError = new Error(`Gemini request failed: ${res.status} ${statusText}`);
-      if (RETRYABLE_STATUSES.has(res.status) && attempt < MAX_ATTEMPTS) {
-        const retryAfter = Number(res.headers.get("retry-after"));
-        await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : BACKOFF_MS[attempt - 1]);
-        continue;
+      const error = await geminiError(res);
+      lastError = error;
+      if (attempt < MAX_ATTEMPTS) {
+        if (error.status === 503) {
+          await sleep(BACKOFF_MS[attempt - 1]);
+          continue;
+        }
+        const waitMs = error.retryAt ? Date.parse(error.retryAt) - Date.now() : Infinity;
+        if (error.status === 429 && waitMs <= MAX_RATE_LIMIT_WAIT_MS) {
+          await sleep(Math.max(waitMs, 0));
+          continue;
+        }
       }
-      throw lastError;
+      throw error;
     }
 
     const data = await res.json();
