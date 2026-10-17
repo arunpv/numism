@@ -24,6 +24,9 @@ function distinct(values: (string | number | null | undefined)[]): string[] {
   return [...new Set(values.filter((v): v is string | number => v != null && v !== '').map(String))].sort()
 }
 
+// Album filter value for coins not placed in any album (distinct from "" = all).
+const NO_ALBUM = '__none__'
+
 export function CoinsPage() {
   const [coins, setCoins] = useState<Coin[]>([])
   const [loading, setLoading] = useState(true)
@@ -68,7 +71,9 @@ export function CoinsPage() {
         if (filters.mint_year && String(c.mint_year ?? '') !== filters.mint_year) return false
         if (filters.mint_mark && (c.mint_mark ?? '') !== filters.mint_mark) return false
         if (filters.commemorative_theme && (c.commemorative_theme ?? '') !== filters.commemorative_theme) return false
-        if (filters.album && (c.albums?.name ?? '') !== filters.album) return false
+        if (filters.album === NO_ALBUM) {
+          if (c.albums) return false
+        } else if (filters.album && (c.albums?.name ?? '') !== filters.album) return false
         return true
       }),
     [coins, filters],
@@ -145,6 +150,7 @@ export function CoinsPage() {
           </select>
           <select value={filters.album} onChange={(e) => setFilters({ ...filters, album: e.target.value })}>
             <option value="">All albums</option>
+            <option value={NO_ALBUM}>No album</option>
             {options.album.map((v) => (
               <option key={v} value={v}>
                 {v}
