@@ -94,6 +94,10 @@ async function processBatch() {
   // finishing every pending item — reclaim whatever it left stuck in
   // `processing` so this run (or a later one) actually gets to it.
   await batchQueue.reclaimStuckProcessing()
+  // Paused for a Gemini rate limit: returning normally (not throwing) means
+  // the browser won't keep retrying before the reset; the app re-registers
+  // the sync every time it opens, so a launch after the reset resumes it.
+  if (await batchQueue.pausedUntil()) return
   const pending = await batchQueue.listByStatus('pending')
   for (const item of pending) {
     await batchQueue.setStatus(item.id, 'processing')
@@ -107,10 +111,14 @@ async function processBatch() {
         markImageUrl: result.mark_image_url,
       })
     } catch (err) {
-      await batchQueue.setError(item.id, (err as Error).message)
       // Rate limited: every remaining item would fail the same way, so
-      // leave them pending for a later run instead of erroring them all.
-      if (err instanceof ApiError && err.isRateLimit) break
+      // leave this one and the rest pending for a run after the reset
+      // instead of erroring them.
+      if (err instanceof ApiError && err.isRateLimit) {
+        await batchQueue.setRateLimited(item.id, err.retryAt)
+        break
+      }
+      await batchQueue.setError(item.id, (err as Error).message)
     }
   }
 }

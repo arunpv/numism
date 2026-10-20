@@ -12,6 +12,7 @@ export function QueuePage() {
   const [items, setItems] = useState<QueueItem[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [processingNow, setProcessingNow] = useState(false)
+  const [pausedUntil, setPausedUntil] = useState<number | null>(null)
 
   useEffect(() => {
     refresh()
@@ -19,8 +20,9 @@ export function QueuePage() {
 
   async function refresh() {
     const all = await batchQueue.listAll()
-    all.sort((a, b) => b.capturedAt - a.capturedAt)
+    all.sort((a, b) => a.capturedAt - b.capturedAt)
     setItems(all)
+    setPausedUntil(await batchQueue.pausedUntil())
   }
 
   async function handleRetry(id: number) {
@@ -76,9 +78,16 @@ export function QueuePage() {
       <p className="page-hint">
         {pending.length} pending · {processing.length} processing · {ready.length} ready to review · {errored.length} errored
       </p>
-      <p className="page-hint">
-        Pending items also process automatically once the phone is on WiFi with the screen off.
-      </p>
+      {pausedUntil ? (
+        <p className="page-hint">
+          Paused until {formatPausedUntil(pausedUntil)} (Gemini limit). Pending items resume automatically the next time
+          you open the app after that, once the phone is on WiFi with the screen off.
+        </p>
+      ) : (
+        <p className="page-hint">
+          Pending items also process automatically once the phone is on WiFi with the screen off.
+        </p>
+      )}
       <button type="button" onClick={handleProcessNow} disabled={processingNow || pending.length === 0}>
         {processingNow ? 'Processing…' : 'Process now'}
       </button>
@@ -132,6 +141,14 @@ export function QueuePage() {
       </ul>
     </div>
   )
+}
+
+function formatPausedUntil(until: number): string {
+  const at = new Date(until)
+  const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  return at.toDateString() === new Date().toDateString()
+    ? time
+    : `${at.toLocaleDateString([], { weekday: 'short' })}, ${time}`
 }
 
 function QueueThumb({ blob }: { blob: Blob }) {

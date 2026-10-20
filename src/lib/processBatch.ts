@@ -27,13 +27,15 @@ export async function processQueueNow(onItemDone?: () => void): Promise<void> {
         markImageUrl: result.mark_image_url,
       })
     } catch (err) {
-      await batchQueue.setError(item.id, (err as Error).message)
       // Rate limited: every remaining item would fail the same way, so
-      // leave them pending for a later run instead of erroring them all.
+      // leave this one and the rest pending for a run after the reset
+      // instead of erroring them.
       if (err instanceof ApiError && err.isRateLimit) {
+        await batchQueue.setRateLimited(item.id, err.retryAt)
         onItemDone?.()
         break
       }
+      await batchQueue.setError(item.id, (err as Error).message)
     }
     onItemDone?.()
   }

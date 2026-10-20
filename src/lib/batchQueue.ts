@@ -18,6 +18,10 @@ export type QueueItem = {
   mintName?: string | null
   markImageUrl?: string | null
   errorMessage?: string
+  // Set on the item that hit a Gemini rate limit: it stays `pending` (it
+  // didn't fail — Gemini just refused it for now) and processing is paused
+  // until this time. See batchQueue.pausedUntil.
+  rateLimitedUntil?: number
 }
 
 const DB_NAME = 'numismatica-batch'
@@ -92,6 +96,7 @@ export const batchQueue = {
         mintName: result.mintName,
         markImageUrl: result.markImageUrl,
         errorMessage: undefined,
+        rateLimitedUntil: undefined,
       }),
     )
   },
@@ -99,7 +104,27 @@ export const batchQueue = {
   setError: async (id: number, errorMessage: string): Promise<void> => {
     const item = await batchQueue.get(id)
     if (!item) return
-    await withStore('readwrite', (store) => store.put({ ...item, status: 'error', errorMessage }))
+    await withStore('readwrite', (store) => store.put({ ...item, status: 'error', errorMessage, rateLimitedUntil: undefined }))
+  },
+
+  // Gemini refused this item for quota reasons — put it back to `pending`
+  // (it's still first in line) and record when the quota resets. Falls back
+  // to a minute out when the function didn't send a retry_at.
+  setRateLimited: async (id: number, retryAt: string | null): Promise<void> => {
+    const item = await batchQueue.get(id)
+    if (!item) return
+    const until = retryAt ? Date.parse(retryAt) : Date.now() + 60_000
+    await withStore('readwrite', (store) =>
+      store.put({ ...item, status: 'pending', errorMessage: undefined, rateLimitedUntil: until }),
+    )
+  },
+
+  // When the queue is paused for a rate limit, the time it resumes; null if
+  // it isn't paused (no pending item carries a reset time still in the future).
+  pausedUntil: async (): Promise<number | null> => {
+    const pending = await batchQueue.listByStatus('pending')
+    const until = Math.max(0, ...pending.map((item) => item.rateLimitedUntil ?? 0))
+    return until > Date.now() ? until : null
   },
 
   remove: (id: number): Promise<void> => withStore('readwrite', (store) => store.delete(id)) as Promise<void>,
