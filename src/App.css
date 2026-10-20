@@ -673,13 +673,23 @@
 
 .index-card {
   position: absolute;
-  box-sizing: border-box;
+  display: flex;
   transform-origin: top left;
   /* cut line */
   outline: 0.2mm dashed #999;
   font-family: var(--sans);
   letter-spacing: 0;
   color: #000;
+}
+
+.index-card-panel {
+  box-sizing: border-box;
+  flex: none;
+
+  /* fold line between a cover card and its joined fold-out */
+  & + & {
+    border-left: 0.3mm dotted #999;
+  }
 }
 
 .index-card-title {
@@ -696,10 +706,14 @@
   align-items: flex-start;
 }
 
-.index-card-table {
+.index-card-column {
   flex: 1 1 0;
   min-width: 0;
-  table-layout: fixed;
+  overflow: hidden;
+}
+
+.index-card-table {
+  width: 100%;
   border-collapse: collapse;
 
   th,
@@ -709,6 +723,17 @@
     overflow: hidden;
     text-overflow: ellipsis;
     text-align: left;
+  }
+
+  /* shrink to content */
+  .fit {
+    width: 1%;
+  }
+
+  /* share the remaining width (set per table from the header cells);
+     max-width: 0 lets them shrink below their text so the ellipsis applies */
+  .clip {
+    max-width: 0;
   }
 
   th {
