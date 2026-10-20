@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { referenceApi, type Album } from '../lib/api'
+import { IndexCard } from '../components/IndexCard'
 
 export function AlbumsPage() {
   const [albums, setAlbums] = useState<Album[]>([])
@@ -12,7 +13,10 @@ export function AlbumsPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editNumPages, setEditNumPages] = useState('')
   const [editPocketsPerPage, setEditPocketsPerPage] = useState('')
+  const [editCardWidth, setEditCardWidth] = useState('')
+  const [editCardHeight, setEditCardHeight] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
+  const [cardAlbumId, setCardAlbumId] = useState<number | null>(null)
 
   useEffect(() => {
     load()
@@ -62,17 +66,20 @@ export function AlbumsPage() {
     setEditingId(a.id)
     setEditNumPages(a.num_pages != null ? String(a.num_pages) : '')
     setEditPocketsPerPage(a.pockets_per_page != null ? String(a.pockets_per_page) : '')
+    setEditCardWidth(a.card_width_mm != null ? String(a.card_width_mm) : '')
+    setEditCardHeight(a.card_height_mm != null ? String(a.card_height_mm) : '')
   }
 
   async function handleSaveEdit(id: number) {
     setSavingEdit(true)
     setError(null)
     try {
-      await referenceApi.updateAlbumLayout(
-        id,
-        editNumPages ? Number(editNumPages) : null,
-        editPocketsPerPage ? Number(editPocketsPerPage) : null,
-      )
+      await referenceApi.updateAlbum(id, {
+        num_pages: editNumPages ? Number(editNumPages) : null,
+        pockets_per_page: editPocketsPerPage ? Number(editPocketsPerPage) : null,
+        card_width_mm: editCardWidth ? Number(editCardWidth) : null,
+        card_height_mm: editCardHeight ? Number(editCardHeight) : null,
+      })
       setEditingId(null)
       await load()
     } catch (e) {
@@ -82,12 +89,16 @@ export function AlbumsPage() {
     }
   }
 
+  const cardAlbum = albums.find((a) => a.id === cardAlbumId) ?? null
+  if (cardAlbum) return <IndexCard album={cardAlbum} onBack={() => setCardAlbumId(null)} />
+
   return (
     <div className="page">
       <h1>Albums</h1>
       <p className="page-hint">
         Layout (pages × pockets per page) is optional — leave blank if you don't have specs yet. Once both are set
-        for an album, placing a coin outside that range or in an already-occupied pocket is rejected.
+        for an album, placing a coin outside that range or in an already-occupied pocket is rejected. Card size is the
+        index card stuck inside each cover — measure the inside cover and leave a few mm spare on each side.
       </p>
 
       <form className="add-form" onSubmit={handleAdd}>
@@ -126,6 +137,10 @@ export function AlbumsPage() {
                   {a.num_pages != null && a.pockets_per_page != null
                     ? `${a.num_pages} pages × ${a.pockets_per_page} pockets`
                     : 'Layout not set'}
+                  {' · '}
+                  {a.card_width_mm != null && a.card_height_mm != null
+                    ? `Card ${a.card_width_mm} × ${a.card_height_mm} mm`
+                    : 'Card size not set'}
                 </span>
               </div>
 
@@ -145,6 +160,22 @@ export function AlbumsPage() {
                     onChange={(e) => setEditPocketsPerPage(e.target.value)}
                     min={1}
                   />
+                  <input
+                    type="number"
+                    placeholder="Card W mm"
+                    value={editCardWidth}
+                    onChange={(e) => setEditCardWidth(e.target.value)}
+                    min={1}
+                    step={0.5}
+                  />
+                  <input
+                    type="number"
+                    placeholder="Card H mm"
+                    value={editCardHeight}
+                    onChange={(e) => setEditCardHeight(e.target.value)}
+                    min={1}
+                    step={0.5}
+                  />
                   <button type="button" onClick={() => handleSaveEdit(a.id)} disabled={savingEdit}>
                     {savingEdit ? 'Saving…' : 'Save'}
                   </button>
@@ -153,9 +184,14 @@ export function AlbumsPage() {
                   </button>
                 </div>
               ) : (
-                <button type="button" className="mint-image-btn" onClick={() => startEdit(a)}>
-                  Edit layout
-                </button>
+                <>
+                  <button type="button" className="mint-image-btn" onClick={() => startEdit(a)}>
+                    Edit
+                  </button>
+                  <button type="button" className="mint-image-btn" onClick={() => setCardAlbumId(a.id)}>
+                    Index card
+                  </button>
+                </>
               )}
 
               <button type="button" className="delete-btn" onClick={() => handleDelete(a.id)}>

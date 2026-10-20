@@ -507,6 +507,7 @@
 
 .album-edit-inline {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   align-items: center;
 
@@ -627,5 +628,134 @@
 
   &:hover {
     color: #e5484d;
+  }
+}
+
+.index-card-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: center;
+  margin-bottom: 16px;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 15px;
+  }
+
+  .mode-toggle {
+    margin-bottom: 0;
+  }
+}
+
+.card-preview {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Sheets are laid out at true size in mm and scaled down to fit on screen;
+   the frame reserves the scaled size so the page doesn't scroll sideways. */
+.card-sheet-frame {
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.card-sheet {
+  position: relative;
+  transform-origin: top left;
+  background: #fff;
+  color: #000;
+}
+
+.index-card {
+  position: absolute;
+  box-sizing: border-box;
+  transform-origin: top left;
+  /* cut line */
+  outline: 0.2mm dashed #999;
+  font-family: var(--sans);
+  letter-spacing: 0;
+  color: #000;
+}
+
+.index-card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 2mm;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.index-card-columns {
+  display: flex;
+  align-items: flex-start;
+}
+
+.index-card-table {
+  flex: 1 1 0;
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 0 0.8mm;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+  }
+
+  th {
+    font-weight: 700;
+    border-bottom: 0.2mm solid #000;
+  }
+
+  tbody tr:nth-child(even) {
+    background: #eee;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
+
+@media print {
+  .tab-nav,
+  .no-print {
+    display: none !important;
+  }
+
+  #root {
+    width: auto;
+    border: none;
+    min-height: 0;
+  }
+
+  .page {
+    padding: 0;
+  }
+
+  .card-preview {
+    margin: 0;
+    gap: 0;
+  }
+
+  .card-sheet-frame {
+    width: auto !important;
+    height: auto !important;
+    box-shadow: none;
+    break-after: page;
+
+    &:last-child {
+      break-after: auto;
+    }
+  }
+
+  .card-sheet {
+    transform: none !important;
   }
 }
