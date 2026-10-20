@@ -9,7 +9,7 @@
 // each "mint" row the client sees is really one rule, flattened for display.
 //
 // Request body: { table: "mints" | "albums", action: "list" | "create" | "update" | "delete", ...fields }
-// ("update" is albums-only: layout and index-card size.)
+// ("update" is albums-only: layout and inside-cover size.)
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
 
@@ -137,9 +137,9 @@ export default {
       const { id } = body;
       if (id == null) return Response.json({ error: "id is required" }, { status: 400 });
       // Only the fields actually sent are changed (null clears one), so the
-      // layout and card-size edits can't wipe each other out.
+      // layout and cover-size edits can't wipe each other out.
       const patch: Record<string, number | null> = {};
-      for (const key of ["num_pages", "pockets_per_page", "card_width_mm", "card_height_mm"]) {
+      for (const key of ["num_pages", "pockets_per_page", "cover_width_mm", "cover_height_mm"]) {
         if (key in body) patch[key] = body[key] ?? null;
       }
       if (Object.keys(patch).length === 0) return Response.json({ error: "nothing to update" }, { status: 400 });

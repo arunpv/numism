@@ -74,8 +74,9 @@ export type Album = {
   created_at: string
   num_pages: number | null
   pockets_per_page: number | null
-  card_width_mm: number | null
-  card_height_mm: number | null
+  // measured inside-cover size; the index card is derived from it
+  cover_width_mm: number | null
+  cover_height_mm: number | null
 }
 
 export const referenceApi = {
@@ -118,7 +119,7 @@ export const referenceApi = {
   // Only the fields passed are changed; null clears one.
   updateAlbum: (
     id: number,
-    patch: Partial<Pick<Album, 'num_pages' | 'pockets_per_page' | 'card_width_mm' | 'card_height_mm'>>,
+    patch: Partial<Pick<Album, 'num_pages' | 'pockets_per_page' | 'cover_width_mm' | 'cover_height_mm'>>,
   ) => callFunction<{ data: Album }>('manage-reference', { table: 'albums', action: 'update', id, ...patch }),
   deleteAlbum: (id: number) => callFunction<{ ok: true }>('manage-reference', { table: 'albums', action: 'delete', id }),
 }

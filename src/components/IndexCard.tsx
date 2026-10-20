@@ -28,8 +28,10 @@ const PAPERS = {
 } as const
 type Paper = keyof typeof PAPERS
 
-type Settings = { fontPt: number; columns: 1 | 2; paper: Paper; foldOut: boolean }
-const DEFAULT_SETTINGS: Settings = { fontPt: 8, columns: 1, paper: 'A4', foldOut: false }
+// marginMm: gap left between the card and the cover's edges on each side,
+// so the card clears the hinge and the cover edges.
+type Settings = { fontPt: number; columns: 1 | 2; paper: Paper; foldOut: boolean; marginMm: number }
+const DEFAULT_SETTINGS: Settings = { fontPt: 8, columns: 1, paper: 'A4', foldOut: false, marginMm: 2 }
 
 type Panel = { side: string; coins: Coin[] }
 
@@ -146,9 +148,12 @@ export function IndexCard({ album, onBack }: { album: Album; onBack: () => void 
     saveSettings(album.id, next)
   }
 
-  const cardW = album.card_width_mm
-  const cardH = album.card_height_mm
-  const { fontPt, columns, paper, foldOut } = settings
+  const { fontPt, columns, paper, foldOut, marginMm } = settings
+  const coverW = album.cover_width_mm
+  const coverH = album.cover_height_mm
+  const sizeFrom = (cover: number | null) => (cover != null && cover - 2 * marginMm > 0 ? cover - 2 * marginMm : null)
+  const cardW = sizeFrom(coverW)
+  const cardH = sizeFrom(coverH)
   const sides = foldOut ? ['Front cover', 'Front fold-out', 'Back cover', 'Back fold-out'] : ['Front cover', 'Back cover']
 
   const rowH = fontPt * PT_MM * 1.4
@@ -201,6 +206,20 @@ export function IndexCard({ album, onBack }: { album: Album; onBack: () => void 
     setClippedCount(clipped)
   }, [split, fontPt, columns, cardW, cardH, foldOut, paper])
 
+  const marginControl = (
+    <label>
+      Margin {marginMm} mm each side
+      <input
+        type="range"
+        min={0}
+        max={10}
+        step={0.5}
+        value={marginMm}
+        onChange={(e) => update({ marginMm: Number(e.target.value) })}
+      />
+    </label>
+  )
+
   if (cardW == null || cardH == null || !placement) {
     return (
       <div className="page">
@@ -208,9 +227,19 @@ export function IndexCard({ album, onBack }: { album: Album; onBack: () => void 
           ← Back to albums
         </button>
         <h1>Index card</h1>
-        <p className="page-hint">
-          {album.name} — set this album's card size first: on the Albums page, tap Edit and enter the card width and height in mm.
-        </p>
+        {coverW == null || coverH == null ? (
+          <p className="page-hint">
+            {album.name} — set this album's cover size first: on the Albums page, tap Edit and enter the inside cover's
+            width and height in mm.
+          </p>
+        ) : (
+          <>
+            <p className="error">
+              A {marginMm} mm margin leaves no room inside a {coverW} × {coverH} mm cover.
+            </p>
+            <div className="index-card-controls">{marginControl}</div>
+          </>
+        )}
       </div>
     )
   }
@@ -227,12 +256,14 @@ export function IndexCard({ album, onBack }: { album: Album; onBack: () => void 
         </button>
         <h1>Index card</h1>
         <p className="page-hint">
-          {album.name} · card {cardW} × {cardH} mm · one for the inside front cover, one for the back. Print on acid-free paper or card
-          (120–150 GSM) and fix with photo corners or archival tape, not glue. Cut along the dashed line
+          {album.name} · cover {coverW} × {coverH} mm → card {cardW} × {cardH} mm · one for the inside front cover, one
+          for the back. Print on acid-free paper or card (120–150 GSM), hold it with clear acid-free photo corners and
+          hinge any separate fold-out with linen tape, not glue. Cut along the dashed line
           {joinFoldOut && ', fold along the dotted one'}.
         </p>
 
         <div className="index-card-controls">
+          {marginControl}
           <label>
             Font size {fontPt} pt
             <input

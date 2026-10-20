@@ -13,8 +13,8 @@ export function AlbumsPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editNumPages, setEditNumPages] = useState('')
   const [editPocketsPerPage, setEditPocketsPerPage] = useState('')
-  const [editCardWidth, setEditCardWidth] = useState('')
-  const [editCardHeight, setEditCardHeight] = useState('')
+  const [editCoverWidth, setEditCoverWidth] = useState('')
+  const [editCoverHeight, setEditCoverHeight] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
   const [cardAlbumId, setCardAlbumId] = useState<number | null>(null)
 
@@ -66,8 +66,8 @@ export function AlbumsPage() {
     setEditingId(a.id)
     setEditNumPages(a.num_pages != null ? String(a.num_pages) : '')
     setEditPocketsPerPage(a.pockets_per_page != null ? String(a.pockets_per_page) : '')
-    setEditCardWidth(a.card_width_mm != null ? String(a.card_width_mm) : '')
-    setEditCardHeight(a.card_height_mm != null ? String(a.card_height_mm) : '')
+    setEditCoverWidth(a.cover_width_mm != null ? String(a.cover_width_mm) : '')
+    setEditCoverHeight(a.cover_height_mm != null ? String(a.cover_height_mm) : '')
   }
 
   async function handleSaveEdit(id: number) {
@@ -77,8 +77,8 @@ export function AlbumsPage() {
       await referenceApi.updateAlbum(id, {
         num_pages: editNumPages ? Number(editNumPages) : null,
         pockets_per_page: editPocketsPerPage ? Number(editPocketsPerPage) : null,
-        card_width_mm: editCardWidth ? Number(editCardWidth) : null,
-        card_height_mm: editCardHeight ? Number(editCardHeight) : null,
+        cover_width_mm: editCoverWidth ? Number(editCoverWidth) : null,
+        cover_height_mm: editCoverHeight ? Number(editCoverHeight) : null,
       })
       setEditingId(null)
       await load()
@@ -97,8 +97,9 @@ export function AlbumsPage() {
       <h1>Albums</h1>
       <p className="page-hint">
         Layout (pages × pockets per page) is optional — leave blank if you don't have specs yet. Once both are set
-        for an album, placing a coin outside that range or in an already-occupied pocket is rejected. Card size is the
-        index card stuck inside each cover — measure the inside cover and leave a few mm spare on each side.
+        for an album, placing a coin outside that range or in an already-occupied pocket is rejected. Cover size is the
+        measured inside of the album cover, where the index card goes — enter it as measured; the card's margin is
+        set when you make the card.
       </p>
 
       <form className="add-form" onSubmit={handleAdd}>
@@ -138,9 +139,9 @@ export function AlbumsPage() {
                     ? `${a.num_pages} pages × ${a.pockets_per_page} pockets`
                     : 'Layout not set'}
                   {' · '}
-                  {a.card_width_mm != null && a.card_height_mm != null
-                    ? `Card ${a.card_width_mm} × ${a.card_height_mm} mm`
-                    : 'Card size not set'}
+                  {a.cover_width_mm != null && a.cover_height_mm != null
+                    ? `Cover ${a.cover_width_mm} × ${a.cover_height_mm} mm`
+                    : 'Cover size not set'}
                 </span>
               </div>
 
@@ -162,17 +163,17 @@ export function AlbumsPage() {
                   />
                   <input
                     type="number"
-                    placeholder="Card W mm"
-                    value={editCardWidth}
-                    onChange={(e) => setEditCardWidth(e.target.value)}
+                    placeholder="Cover W mm"
+                    value={editCoverWidth}
+                    onChange={(e) => setEditCoverWidth(e.target.value)}
                     min={1}
                     step={0.5}
                   />
                   <input
                     type="number"
-                    placeholder="Card H mm"
-                    value={editCardHeight}
-                    onChange={(e) => setEditCardHeight(e.target.value)}
+                    placeholder="Cover H mm"
+                    value={editCoverHeight}
+                    onChange={(e) => setEditCoverHeight(e.target.value)}
                     min={1}
                     step={0.5}
                   />
