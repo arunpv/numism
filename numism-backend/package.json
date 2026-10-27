@@ -11,6 +11,6 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "supabase": "^2.116.0"
+    "supabase": "^2.122.0"
   }
 }
